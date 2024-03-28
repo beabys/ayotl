@@ -28,11 +28,6 @@ func New() *Config {
 	return c
 }
 
-func (c *Config) IsMergeEnv(me bool) *Config {
-	c.mergEnv = me
-	return c
-}
-
 func (c *Config) SetConfigMap(cm ConfigMap) *Config {
 	c.configMap = cm
 	return c
@@ -146,6 +141,7 @@ func (c *Config) SetDefault(key string, val interface{}) {
 }
 
 func (c *Config) LoadEnv() *Config {
+	c.mergEnv = true
 	if c.configMap == nil {
 		c.configMap = make(ConfigMap)
 	}
