@@ -1,0 +1,12 @@
+stages:
+  - test
+
+unit_tests:
+  stage: test
+  image: golang:1.22.0-bullseye
+  script:
+    - make unit-coverage
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - unit.html
