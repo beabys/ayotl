@@ -42,16 +42,14 @@ func TestConfig(t *testing.T) {
 		os.Unsetenv("CONFIG_FILE")
 		mock := &MockConfig{}
 		config := New().IsMergeEnv(true)
-		assert.ErrorContains(t, config.LoadConfigs(mock), "CONFIG_FILE")
+		assert.ErrorContains(t, config.LoadConfigs(mock, ""), "configuration file")
 	})
 
 	t.Run("test Error Loading configs file", func(t *testing.T) {
 		os.Unsetenv("CONFIG_FILE")
 		mock := &MockConfig{}
 		config := New().SetConfigImpl(mock)
-		os.Setenv("CONFIG_FILE", "./../env.configuration.json")
-		assert.ErrorContains(t, config.LoadConfigs(mock), "Fail to load configs")
-		os.Unsetenv("CONFIG_FILE")
+		assert.ErrorContains(t, config.LoadConfigs(mock, "./../env.configuration.json"), "Fail to load configs")
 	})
 
 	t.Run("Test Loading configs", func(t *testing.T) {
@@ -60,9 +58,7 @@ func TestConfig(t *testing.T) {
 		data := `{"server": {"enabled": false},"second": {"config": {"enabled": false}}}`
 		testPath, err := createTestConfigFile(path, "/config.json", data)
 		assert.NoError(t, err)
-		os.Setenv("CONFIG_FILE", testPath+"/config.json")
-		assert.NoError(t, config.LoadConfigs(mock))
-		os.Unsetenv("CONFIG_FILE")
+		assert.NoError(t, config.LoadConfigs(mock, testPath+"/config.json"))
 	})
 
 	t.Run("Test Loading configs with config placeholders", func(t *testing.T) {
@@ -71,11 +67,9 @@ func TestConfig(t *testing.T) {
 		testPath, err := createTestConfigFile(path, "/config.json", data)
 		assert.NoError(t, err)
 		os.Setenv("IS_CONFIG_FOR_TEST_ENABLED", "true")
-		os.Setenv("CONFIG_FILE", testPath+"/config.json")
 		c := &Config{}
 		config := c.IsMergeEnv(true).SetConfigImpl(mock)
-		assert.NoError(t, config.LoadConfigs(mock))
-		os.Unsetenv("CONFIG_FILE")
+		assert.NoError(t, config.LoadConfigs(mock, testPath+"/config.json"))
 		os.Unsetenv("IS_CONFIG_FOR_TEST_ENABLED")
 	})
 
@@ -84,76 +78,11 @@ func TestConfig(t *testing.T) {
 		data := `{"server": {"enabled": "${IS_CONFIG_FOR_TEST_ENABLED_SECOND}"},"second": {"config": {"enabled": false}}}`
 		testPath, err := createTestConfigFile(path, "/config.json", data)
 		assert.NoError(t, err)
-		os.Setenv("CONFIG_FILE", testPath+"/config.json")
 		c := &Config{}
 		config := c.IsMergeEnv(true).SetConfigImpl(mock)
-		assert.NoError(t, config.LoadConfigs(mock))
-		os.Unsetenv("CONFIG_FILE")
+		assert.NoError(t, config.LoadConfigs(mock, testPath+"/config.json"))
 	})
 }
-
-// func TestFetchAWSSecretes(t *testing.T) {
-
-// 	path := "./../../testConfigAws/"
-// 	defer os.RemoveAll(path)
-// 	t.Run("Test AWS config", func(t *testing.T) {
-// 		os.Setenv("AWS_REGION", "eu-west-1")
-// 		mock := &MockConfig{}
-// 		config := New().SetConfigImpl(mock)
-// 		awsConfig := config.SetAWSConfigs()
-// 		wants := &aws.Config{Region: aws.String("eu-west-1")}
-// 		areEqual := assert.ObjectsAreEqual(awsConfig, wants)
-// 		assert.True(t, areEqual)
-// 	})
-
-// 	// t.Run("Test Fail with empty data AWS Secrets", func(t *testing.T) {
-// 	// 	mock := &MockConfig{}
-// 	// 	fetcher := &MockFetcher{Content: []byte("")}
-// 	// 	config := New().SetConfigImpl(mock).SetFetcher(fetcher)
-// 	// 	os.Setenv("ENVIRONMENT_CONFIG", "myconfig")
-// 	// 	os.Setenv("ENVIRONMENT_STORAGE", "AWS_SECRET")
-// 	// 	assert.ErrorContains(t, config.LoadConfigs(mock), "error parsing json from secrets")
-// 	// 	os.Unsetenv("ENVIRONMENT_STORAGE")
-// 	// 	os.Unsetenv("ENVIRONMENT_CONFIG")
-// 	// })
-
-// 	t.Run("Test Fail fetch from AWS Secrets", func(t *testing.T) {
-// 		mock := &MockConfig{}
-// 		fetcher := &MockFetcherError{Content: []byte("")}
-// 		config := New().SetConfigImpl(mock).SetFetcher(fetcher)
-// 		os.Setenv("ENVIRONMENT_CONFIG", "myconfig")
-// 		os.Setenv("ENVIRONMENT_STORAGE", "AWS_SECRET")
-// 		assert.ErrorContains(t, config.LoadConfigs(mock), "error fetching general config")
-// 		os.Unsetenv("ENVIRONMENT_STORAGE")
-// 		os.Unsetenv("ENVIRONMENT_CONFIG")
-// 	})
-
-// 	t.Run("Test Success fetch from AWS Secrets", func(t *testing.T) {
-// 		mock := &MockConfig{}
-// 		randomFolderName := path + randomString(8)
-// 		result := []byte("{\"application.port\": 8080,\"logger.log_errors_to\": \"stderr\",\"logger.log_output_to\": \"stderr\",\"logger.log_level\": \"log\"}")
-// 		result2 := []byte("{\"logger.log_errors_to\": \"stdout\",\"logger.log_output_to\": \"stdout\",\"logger.log_level\": \"info\"}")
-// 		fetcher := &MockFetcher2{Content1: result, Content2: result2}
-// 		config := New().SetConfigImpl(mock).SetFetcher(fetcher)
-// 		data := `{"grpc_server": {"enabled": false},"apollo_product": {"consumer": {"enabled": false}}}`
-// 		errCreatingDir := os.MkdirAll(randomFolderName, os.ModePerm)
-// 		if errCreatingDir != nil {
-// 			fmt.Printf("error creating Directorie(s)")
-// 		}
-// 		createFile(randomFolderName+"/config.json", data)
-// 		os.Setenv("ENVIRONMENT_CONFIG", "myconfig,myconfig2")
-// 		os.Setenv("ENVIRONMENT_STORAGE", "AWS_SECRET")
-// 		os.Setenv("LOCAL_CONFIG", randomFolderName+"/config.json")
-// 		err := config.LoadConfigs(mock)
-// 		assert.Equal(t, mock.App.Port, int(8080))
-// 		assert.Equal(t, mock.Logger.LogOutput, "stderr")
-// 		assert.Equal(t, mock.Logger.Level, "log")
-// 		assert.NoError(t, err)
-// 		os.Unsetenv("LOCAL_CONFIG")
-// 		os.Unsetenv("ENVIRONMENT_STORAGE")
-// 		os.Unsetenv("ENVIRONMENT_CONFIG")
-// 	})
-// }
 
 func TestMustFunctions(t *testing.T) {
 	t.Run("test MustBool", func(t *testing.T) {
