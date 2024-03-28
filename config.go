@@ -50,12 +50,11 @@ func (c *Config) SetDefaults() {
 
 // LoadConfig is a function to load the configuration, stored on the config files
 // Unmarshalling in the Struct given
-func (c *Config) LoadConfigs(configuration interface{}) (err error) {
+func (c *Config) LoadConfigs(configuration interface{}, configFile string) (err error) {
 	// validate if required environment variables exist to start reading the configs
-	configFile := os.Getenv("CONFIG_FILE")
 
 	if configFile == "" {
-		return fmt.Errorf("CONFIG_FILE is empty or is not set")
+		return fmt.Errorf("configuration file should not be empty")
 	}
 
 	if _, err := os.Stat(configFile); err != nil {
