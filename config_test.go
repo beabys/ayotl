@@ -32,7 +32,7 @@ func TestConfig(t *testing.T) {
 	t.Run("test new should return a new config", func(t *testing.T) {
 		mock := &MockConfig{}
 		configMap := make(ConfigMap)
-		config := New().IsMergeEnv(true).SetConfigImpl(mock).SetConfigMap(configMap)
+		config := New().SetConfigImpl(mock).SetConfigMap(configMap).LoadEnv()
 		var want = &Config{true, configMap, mock}
 		areEqual := assert.ObjectsAreEqual(config, want)
 		assert.True(t, areEqual)
@@ -41,7 +41,7 @@ func TestConfig(t *testing.T) {
 	t.Run("test Error Loading configs path without CONFIG_FILE", func(t *testing.T) {
 		os.Unsetenv("CONFIG_FILE")
 		mock := &MockConfig{}
-		config := New().IsMergeEnv(true)
+		config := New()
 		assert.ErrorContains(t, config.LoadConfigs(mock, ""), "configuration file")
 	})
 
@@ -54,7 +54,7 @@ func TestConfig(t *testing.T) {
 
 	t.Run("Test Loading configs", func(t *testing.T) {
 		mock := &MockConfig{}
-		config := New().IsMergeEnv(true).SetConfigImpl(mock)
+		config := New().SetConfigImpl(mock).LoadEnv()
 		data := `{"server": {"enabled": false},"second": {"config": {"enabled": false}}}`
 		testPath, err := createTestConfigFile(path, "/config.json", data)
 		assert.NoError(t, err)
@@ -68,7 +68,7 @@ func TestConfig(t *testing.T) {
 		assert.NoError(t, err)
 		os.Setenv("IS_CONFIG_FOR_TEST_ENABLED", "true")
 		c := &Config{}
-		config := c.IsMergeEnv(true).SetConfigImpl(mock)
+		config := c.SetConfigImpl(mock).LoadEnv()
 		assert.NoError(t, config.LoadConfigs(mock, testPath+"/config.json"))
 		os.Unsetenv("IS_CONFIG_FOR_TEST_ENABLED")
 	})
@@ -79,7 +79,7 @@ func TestConfig(t *testing.T) {
 		testPath, err := createTestConfigFile(path, "/config.json", data)
 		assert.NoError(t, err)
 		c := &Config{}
-		config := c.IsMergeEnv(true).SetConfigImpl(mock)
+		config := c.SetConfigImpl(mock).LoadEnv()
 		assert.NoError(t, config.LoadConfigs(mock, testPath+"/config.json"))
 	})
 }
