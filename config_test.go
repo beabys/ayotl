@@ -68,7 +68,7 @@ func TestConfig(t *testing.T) {
 		assert.NoError(t, err)
 		os.Setenv("IS_CONFIG_FOR_TEST_ENABLED", "true")
 		c := &Config{}
-		config := c.SetConfigImpl(mock).LoadEnv()
+		config := c.SetConfigImpl(mock).WithEnv()
 		assert.NoError(t, config.LoadConfigs(mock, testPath+"/config.json"))
 		os.Unsetenv("IS_CONFIG_FOR_TEST_ENABLED")
 	})
