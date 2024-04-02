@@ -140,7 +140,15 @@ func (c *Config) SetDefault(key string, val interface{}) {
 	}
 }
 
+// LoadEnv Load env variables and add into configmap
+//
+// Deprecated: function will be removed in next release, use WithEnv instead
 func (c *Config) LoadEnv() *Config {
+	return c.WithEnv()
+}
+
+// WithEnv Load env variables and add into configmap
+func (c *Config) WithEnv() *Config {
 	c.mergEnv = true
 	if c.configMap == nil {
 		c.configMap = make(ConfigMap)
