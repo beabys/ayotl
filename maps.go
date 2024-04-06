@@ -32,6 +32,9 @@ func MergeKeys(m1, m2 ConfigMap) map[string]interface{} {
 func MergeEnvVar(m map[string]interface{}) map[string]interface{} {
 	for key, val := range m {
 		switch value := val.(type) {
+		case ConfigMap:
+			// Recursive Call
+			m[key] = MergeEnvVar(value)
 		case map[string]interface{}:
 			// Recursive Call
 			m[key] = MergeEnvVar(value)
