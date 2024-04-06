@@ -1,6 +1,6 @@
-# Config
+# Ayotl
 
-Config is a simple implementation intended to reduce the complexity to manage local configuration files, mapping into defined structs.
+Ayotl is a simple implementation intended to reduce the complexity to manage local configuration files, mapping into defined structs.
 
 
 ## Config Files

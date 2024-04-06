@@ -7,8 +7,8 @@ import (
 	"github.com/mitchellh/mapstructure"
 )
 
-// MergeKeys merge 2 map[string]interface{} given
-func MergeKeys(m1, m2 map[string]interface{}) map[string]interface{} {
+// MergeKeys merge 2 ConfigMap given
+func MergeKeys(m1, m2 ConfigMap) map[string]interface{} {
 	for key, m2Val := range m2 {
 		// first we validate if key exist
 		m1Val, ok := m1[key]
@@ -20,7 +20,7 @@ func MergeKeys(m1, m2 map[string]interface{}) map[string]interface{} {
 		switch v := m1Val.(type) {
 		case map[string]interface{}:
 			// Recursive Call
-			m1[key] = MergeKeys(v, m2Val.(map[string]interface{}))
+			m1[key] = MergeKeys(v, m2Val.(ConfigMap))
 		default:
 			m1[key] = m2Val
 		}
