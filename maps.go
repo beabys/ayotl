@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
@@ -29,19 +28,29 @@ func MergeKeys(m1, m2 ConfigMap) map[string]interface{} {
 }
 
 // MergeEnvVar merge Env variables into placeholders
-func MergeEnvVar(m map[string]interface{}) map[string]interface{} {
+func MergeEnvVar(m, envVars ConfigMap) map[string]interface{} {
 	for key, val := range m {
 		switch value := val.(type) {
 		case ConfigMap:
 			// Recursive Call
-			m[key] = MergeEnvVar(value)
+			m[key] = MergeEnvVar(value, envVars)
 		case map[string]interface{}:
 			// Recursive Call
-			m[key] = MergeEnvVar(value)
+			m[key] = MergeEnvVar(value, envVars)
 		case string:
 			if strings.HasPrefix(value, "${") && strings.HasSuffix(value, "}") {
-				p := strings.TrimSuffix(strings.TrimPrefix(value, "${"), "}")
-				m[key] = os.Getenv(p)
+				value := ""
+				if len(envVars) > 0 {
+					pvalue := GetValue(
+						envVars,
+						[]string{strings.TrimSuffix(strings.TrimPrefix(value, "${"), "}")},
+					)
+					if pvalue != nil {
+						// cast to string as we know all the values from env are strings
+						value = pvalue.(string)
+					}
+				}
+				m[key] = value
 			}
 		default:
 			continue
@@ -107,7 +116,7 @@ func GetValue(m map[string]interface{}, keysToFind []string) interface{} {
 	// we should do a recursive call
 	switch v := val.(type) {
 	case map[string]interface{}:
-		// Recusrive call
+		// Recusive call
 		return GetValue(v, next)
 	default:
 		// if 'next' has keys inside means, the key don't exist

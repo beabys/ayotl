@@ -32,8 +32,10 @@ func TestConfig(t *testing.T) {
 	t.Run("test new should return a new config", func(t *testing.T) {
 		mock := &MockConfig{}
 		configMap := make(ConfigMap)
-		config := New().SetConfigImpl(mock).SetConfigMap(configMap).LoadEnv()
-		var want = &Config{true, configMap, mock}
+		envConfigMap := make(ConfigMap)
+		config := New().SetConfigImpl(mock).SetConfigMap(configMap).WithEnv()
+		var want = &Config{configMap, envConfigMap, mock}
+		want.WithEnv()
 		areEqual := assert.ObjectsAreEqual(config, want)
 		assert.True(t, areEqual)
 	})
@@ -54,7 +56,7 @@ func TestConfig(t *testing.T) {
 
 	t.Run("Test Loading configs", func(t *testing.T) {
 		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).LoadEnv()
+		config := New().SetConfigImpl(mock).WithEnv()
 		data := `{"server": {"enabled": false},"second": {"config": {"enabled": false}}}`
 		testPath, err := createTestConfigFile(path, "/config.json", data)
 		assert.NoError(t, err)
@@ -67,8 +69,8 @@ func TestConfig(t *testing.T) {
 		testPath, err := createTestConfigFile(path, "/config.json", data)
 		assert.NoError(t, err)
 		os.Setenv("IS_CONFIG_FOR_TEST_ENABLED", "true")
-		c := &Config{}
-		config := c.SetConfigImpl(mock).WithEnv()
+		// c := New()
+		config := New().SetConfigImpl(mock).WithEnv()
 		assert.NoError(t, config.LoadConfigs(mock, testPath+"/config.json"))
 		os.Unsetenv("IS_CONFIG_FOR_TEST_ENABLED")
 	})
@@ -78,8 +80,8 @@ func TestConfig(t *testing.T) {
 		data := `{"server": {"enabled": "${IS_CONFIG_FOR_TEST_ENABLED_SECOND}"},"second": {"config": {"enabled": false}}}`
 		testPath, err := createTestConfigFile(path, "/config.json", data)
 		assert.NoError(t, err)
-		c := &Config{}
-		config := c.SetConfigImpl(mock).LoadEnv()
+		// c := &Config{}
+		config := New().SetConfigImpl(mock).WithEnv()
 		assert.NoError(t, config.LoadConfigs(mock, testPath+"/config.json"))
 	})
 }
@@ -88,7 +90,7 @@ func TestMustFunctions(t *testing.T) {
 	t.Run("test MustBool", func(t *testing.T) {
 		mock := &MockConfig{}
 		os.Setenv("ANY", "false")
-		config := New().SetConfigImpl(mock).LoadEnv()
+		config := New().SetConfigImpl(mock).WithEnv()
 		required := true
 		val := config.MustBool("ANY", required)
 		assert.False(t, val)
@@ -97,7 +99,7 @@ func TestMustFunctions(t *testing.T) {
 	t.Run("test MustBool exist", func(t *testing.T) {
 		os.Setenv("ANY", "true")
 		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).LoadEnv()
+		config := New().SetConfigImpl(mock).WithEnv()
 		required := true
 		val := config.MustBool("ANY", required)
 		assert.True(t, val)
@@ -106,7 +108,7 @@ func TestMustFunctions(t *testing.T) {
 	t.Run("test MustString", func(t *testing.T) {
 		os.Setenv("ANY", "required")
 		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).LoadEnv()
+		config := New().SetConfigImpl(mock).WithEnv()
 		required := "required"
 		val := config.MustString("ANY", required)
 		assert.Equal(t, val, required)
@@ -116,7 +118,7 @@ func TestMustFunctions(t *testing.T) {
 	t.Run("test MustInt", func(t *testing.T) {
 		os.Setenv("ANY", "0")
 		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).LoadEnv()
+		config := New().SetConfigImpl(mock).WithEnv()
 		required := 0
 		val := config.MustInt("ANY", required)
 		assert.Equal(t, val, required)
@@ -126,7 +128,7 @@ func TestMustFunctions(t *testing.T) {
 	t.Run("test MustInt32", func(t *testing.T) {
 		os.Setenv("ANY", "0")
 		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).LoadEnv()
+		config := New().SetConfigImpl(mock).WithEnv()
 		integer := 0
 		required := int32(integer)
 		val := config.MustInt32("ANY", required)
@@ -137,7 +139,7 @@ func TestMustFunctions(t *testing.T) {
 	t.Run("test MustInt64", func(t *testing.T) {
 		os.Setenv("ANY", "0")
 		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).LoadEnv()
+		config := New().SetConfigImpl(mock).WithEnv()
 		integer := 0
 		required := int64(integer)
 		val := config.MustInt64("ANY", required)
@@ -148,7 +150,7 @@ func TestMustFunctions(t *testing.T) {
 	t.Run("test MustString with variable", func(t *testing.T) {
 		os.Setenv("ANY", "required")
 		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).LoadEnv()
+		config := New().SetConfigImpl(mock).WithEnv()
 		required := "required"
 		val := config.MustString("ANY", required)
 		assert.Equal(t, val, required)
@@ -158,7 +160,7 @@ func TestMustFunctions(t *testing.T) {
 	t.Run("test MustInt with variable", func(t *testing.T) {
 		os.Setenv("ANY", "10")
 		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).LoadEnv()
+		config := New().SetConfigImpl(mock).WithEnv()
 		required := 10
 		val := config.MustInt("ANY", required)
 		assert.Equal(t, val, required)
@@ -168,7 +170,7 @@ func TestMustFunctions(t *testing.T) {
 	t.Run("test MustInt32 with variable", func(t *testing.T) {
 		os.Setenv("ANY", "10")
 		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).LoadEnv()
+		config := New().SetConfigImpl(mock).WithEnv()
 		integer := 10
 		required := int32(integer)
 		val := config.MustInt32("ANY", required)
@@ -179,7 +181,7 @@ func TestMustFunctions(t *testing.T) {
 	t.Run("test MustInt64 with variable", func(t *testing.T) {
 		os.Setenv("ANY", "10")
 		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).LoadEnv()
+		config := New().SetConfigImpl(mock).WithEnv()
 		integer := 10
 		required := int64(integer)
 		val := config.MustInt64("ANY", required)

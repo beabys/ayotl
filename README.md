@@ -132,15 +132,3 @@ func (c *Config) SetDefaults() ConfigMap {
 Using the `dot-notation` can set the default value, this will be appended in the struct if this config value doesn't exist in our config file.
 
 if those values are defied in our config file, those will be overrided for the one existing in the config file
-
-### Direct Mapping using environment variables
-You can define a struct similar to:
-```go
-type Config struct {
-	Stage    string    `mapstructure:"APPLICATION_STAGE"`
-}
-```
-Assuming your environment variables are like this:
-```bash
-APPLICATION_STAGE=development
-```
