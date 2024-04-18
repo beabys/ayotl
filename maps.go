@@ -39,7 +39,7 @@ func MergeEnvVar(m, envVars ConfigMap) map[string]interface{} {
 			m[key] = MergeEnvVar(value, envVars)
 		case string:
 			if strings.HasPrefix(value, "${") && strings.HasSuffix(value, "}") {
-				value := ""
+				envValue := ""
 				if len(envVars) > 0 {
 					pvalue := GetValue(
 						envVars,
@@ -47,10 +47,10 @@ func MergeEnvVar(m, envVars ConfigMap) map[string]interface{} {
 					)
 					if pvalue != nil {
 						// cast to string as we know all the values from env are strings
-						value = pvalue.(string)
+						envValue = pvalue.(string)
 					}
 				}
-				m[key] = value
+				m[key] = envValue
 			}
 		default:
 			continue
