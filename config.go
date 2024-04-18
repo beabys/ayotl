@@ -11,14 +11,14 @@ import (
 // New return  a New Config
 func New() *Config {
 	c := &Config{}
-	//create a default configMap
-	c.configMap = make(ConfigMap)
-	c.envConfigMap = make(ConfigMap)
+	//create a default ConfigMap
+	c.ConfigMap = make(ConfigMap)
+	c.EnvConfigMap = make(ConfigMap)
 	return c
 }
 
 func (c *Config) SetConfigMap(cm ConfigMap) *Config {
-	c.configMap = cm
+	c.ConfigMap = cm
 	return c
 }
 
@@ -27,8 +27,7 @@ func (c *Config) SetConfigImpl(impl Configuration) *Config {
 	return c
 }
 
-// LoadConfig is a function to load the configuration, stored on the config files
-// Unmarshalling in the Struct given
+// LoadConfig is a function to load the configurations in ConfigMap
 func (c *Config) LoadConfigs(configuration interface{}, configFile string) (err error) {
 	// validate if required environment variables exist to start reading the configs
 
@@ -53,12 +52,11 @@ func (c *Config) LoadConfigs(configuration interface{}, configFile string) (err 
 	}
 
 	// merge the env Variables (replace the placeholders) if mergEnv is true
-	if len(c.envConfigMap) > 0 {
+	if len(c.EnvConfigMap) > 0 {
 		c.mergeEnvVariables()
 	}
 
-	// Unmarshall configs into Config struct
-	return c.Unmarshal(&configuration)
+	return nil
 
 }
 
@@ -69,39 +67,25 @@ func (c *Config) getLocalConfigs(s string) (err error) {
 	return nil
 }
 
-func (c *Config) ConfigFileRead(s string) error {
-	config, err := ReadFile(s)
-	if err != nil {
-		return err
-	}
-	c.configMap = config
-	return nil
-}
-
 func (c *Config) ConfigFileMerge(s string) error {
 	config, err := ReadFile(s)
 	if err != nil {
 		return err
 	}
-	c.configMap = MergeKeys(c.configMap, config)
-	return nil
-}
-
-func (c *Config) MergeConfigMap(m map[string]interface{}) error {
-	c.configMap = MergeKeys(c.configMap, m)
+	c.ConfigMap = MergeKeys(c.ConfigMap, config)
 	return nil
 }
 
 func (c *Config) Get(k string) interface{} {
-	return GetValue(c.configMap, strings.Split(k, "."))
+	return GetValue(c.ConfigMap, strings.Split(k, "."))
 }
 
 func (c *Config) getEnv(k string) interface{} {
-	return GetValue(c.envConfigMap, []string{k})
+	return GetValue(c.EnvConfigMap, []string{k})
 }
 
 func (c *Config) Set(k string, v interface{}) {
-	SetValue(c.configMap, strings.Split(k, "."), v)
+	SetValue(c.ConfigMap, strings.Split(k, "."), v)
 }
 
 func (c *Config) isSet(k string) bool {
@@ -121,15 +105,15 @@ func (c *Config) SetDefault(key string, val interface{}) {
 	}
 }
 
-// WithEnv Load env variables and add into configmap
+// WithEnv Load env variables and add into ConfigMap
 func (c *Config) WithEnv(envs ...string) *Config {
-	if c.envConfigMap == nil {
-		c.envConfigMap = make(ConfigMap)
+	if c.EnvConfigMap == nil {
+		c.EnvConfigMap = make(ConfigMap)
 	}
 	for _, v := range os.Environ() {
 		env := strings.SplitN(v, "=", 2)
 		if canSave(envs, env[0]) {
-			c.envConfigMap[env[0]] = env[1]
+			c.EnvConfigMap[env[0]] = env[1]
 		}
 	}
 	return c
@@ -147,11 +131,12 @@ func canSave(e []string, k string) bool {
 	return false
 }
 
-func (c *Config) Unmarshal(s *interface{}) error {
-	if err := UnMarshall(c.configMap, s); err != nil {
-		return fmt.Errorf(fmt.Sprintf("Unable to unmarshall configurations: %s", err.Error()))
+// Unmarshal function convert a ConfigMap type into a struct
+// using mapStructure Decoder
+func (c *Config) Unmarshal(s any) error {
+	if err := mapStructureDecoder(c.ConfigMap, &s); err != nil {
+		return fmt.Errorf(fmt.Sprintf("Unable to unmarshal configurations: %s", err.Error()))
 	}
-	c.envConfigMap, c.configMap = nil, nil
 	return nil
 }
 
@@ -227,6 +212,6 @@ func (c *Config) MustBool(key string, must bool) bool {
 
 // mergeEnvVariables replace placeholders on config files
 func (c *Config) mergeEnvVariables() {
-	mergeENV := MergeEnvVar(c.configMap, c.envConfigMap)
-	c.configMap = mergeENV
+	mergeENV := MergeEnvVar(c.ConfigMap, c.EnvConfigMap)
+	c.ConfigMap = mergeENV
 }
