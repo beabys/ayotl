@@ -166,8 +166,8 @@ func SetValue(m map[string]interface{}, keysToFind []string, value interface{}) 
 	return m
 }
 
-// Unmarshall function convert a map[string]interface{} into a struct using mapstructure from external package
-func UnMarshall(configMap ConfigMap, out *interface{}) error {
+// mapStructDecoder function convert a map[string]interface{} into a struct using mapstructure from external package
+func mapStructureDecoder(configMap ConfigMap, out *interface{}) error {
 	config := &mapstructure.DecoderConfig{
 		Metadata:         nil,
 		Result:           out,

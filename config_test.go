@@ -61,6 +61,7 @@ func TestConfig(t *testing.T) {
 		testPath, err := createTestConfigFile(path, "/config.json", data)
 		assert.NoError(t, err)
 		assert.NoError(t, config.LoadConfigs(mock, testPath+"/config.json"))
+		assert.NoError(t, config.Unmarshal(mock))
 	})
 
 	t.Run("Test Loading configs with config placeholders", func(t *testing.T) {
@@ -72,6 +73,7 @@ func TestConfig(t *testing.T) {
 		// c := New()
 		config := New().SetConfigImpl(mock).WithEnv()
 		assert.NoError(t, config.LoadConfigs(mock, testPath+"/config.json"))
+		assert.NoError(t, config.Unmarshal(mock))
 		os.Unsetenv("IS_CONFIG_FOR_TEST_ENABLED")
 	})
 
@@ -83,6 +85,7 @@ func TestConfig(t *testing.T) {
 		// c := &Config{}
 		config := New().SetConfigImpl(mock).WithEnv()
 		assert.NoError(t, config.LoadConfigs(mock, testPath+"/config.json"))
+		assert.NoError(t, config.Unmarshal(mock))
 	})
 }
 

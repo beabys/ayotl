@@ -7,7 +7,7 @@ type Configuration interface {
 }
 
 type Config struct {
-	configMap    ConfigMap
-	envConfigMap ConfigMap
+	ConfigMap    ConfigMap
+	EnvConfigMap ConfigMap
 	configImpl   Configuration
 }
