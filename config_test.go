@@ -42,16 +42,15 @@ func TestConfig(t *testing.T) {
 
 	t.Run("test Error Loading configs path without CONFIG_FILE", func(t *testing.T) {
 		os.Unsetenv("CONFIG_FILE")
-		mock := &MockConfig{}
 		config := New()
-		assert.ErrorContains(t, config.LoadConfigs(mock, ""), "configuration file")
+		assert.ErrorContains(t, config.LoadConfigs(""), "configuration file")
 	})
 
 	t.Run("test Error Loading configs file", func(t *testing.T) {
 		os.Unsetenv("CONFIG_FILE")
 		mock := &MockConfig{}
 		config := New().SetConfigImpl(mock)
-		assert.ErrorContains(t, config.LoadConfigs(mock, "./../env.configuration.json"), "Fail to load configs")
+		assert.ErrorContains(t, config.LoadConfigs("./../env.configuration.json"), "Fail to load configs")
 	})
 
 	t.Run("Test Loading configs", func(t *testing.T) {
@@ -60,7 +59,7 @@ func TestConfig(t *testing.T) {
 		data := `{"server": {"enabled": false},"second": {"config": {"enabled": false}}}`
 		testPath, err := createTestConfigFile(path, "/config.json", data)
 		assert.NoError(t, err)
-		assert.NoError(t, config.LoadConfigs(mock, testPath+"/config.json"))
+		assert.NoError(t, config.LoadConfigs(testPath+"/config.json"))
 		assert.NoError(t, config.Unmarshal(mock))
 	})
 
@@ -72,7 +71,7 @@ func TestConfig(t *testing.T) {
 		os.Setenv("IS_CONFIG_FOR_TEST_ENABLED", "true")
 		// c := New()
 		config := New().SetConfigImpl(mock).WithEnv()
-		assert.NoError(t, config.LoadConfigs(mock, testPath+"/config.json"))
+		assert.NoError(t, config.LoadConfigs(testPath+"/config.json"))
 		assert.NoError(t, config.Unmarshal(mock))
 		os.Unsetenv("IS_CONFIG_FOR_TEST_ENABLED")
 	})
@@ -84,7 +83,7 @@ func TestConfig(t *testing.T) {
 		assert.NoError(t, err)
 		// c := &Config{}
 		config := New().SetConfigImpl(mock).WithEnv()
-		assert.NoError(t, config.LoadConfigs(mock, testPath+"/config.json"))
+		assert.NoError(t, config.LoadConfigs(testPath+"/config.json"))
 		assert.NoError(t, config.Unmarshal(mock))
 	})
 }
