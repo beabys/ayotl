@@ -1,11 +1,11 @@
 module github.com/beabys/ayotl
 
-go 1.20.0
+go 1.21.0
 
 require (
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/spf13/cast v1.7.1
-	github.com/stretchr/testify v1.10.0
+	github.com/spf13/cast v1.10.0
+	github.com/stretchr/testify v1.11.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
