@@ -64,14 +64,14 @@ func (c *Config) LoadConfigs(configFiles ...string) (err error) {
 func (c *Config) getLocalConfigs(configFiles ...string) error {
 	for _, s := range configFiles {
 		if err := c.ConfigFileMerge(s); err != nil {
-			return fmt.Errorf(fmt.Sprintf("Fail to load configs from file %s: %s", s, err.Error()))
+			return fmt.Errorf("fail to load configs from file %s: %w", s, err)
 		}
 	}
 	return nil
 }
 
 // ConfigFileMerge read configs from file and merge the config into ConfigMap
-// if Key exist previosly in ConfigMap, the value will be overrided by the value from the file
+// if Key exist previosly in ConfigMap, the value will be overridden by the value from the file
 func (c *Config) ConfigFileMerge(s string) error {
 	if c.ConfigMap == nil {
 		c.ConfigMap = make(ConfigMap)
@@ -147,7 +147,7 @@ func canSave(e []string, k string) bool {
 // using mapStructure Decoder
 func (c *Config) Unmarshal(s any) error {
 	if err := mapStructureDecoder(c.ConfigMap, &s); err != nil {
-		return fmt.Errorf(fmt.Sprintf("Unable to unmarshal configurations: %s", err.Error()))
+		return fmt.Errorf("unable to unmarshal configurations: %w", err)
 	}
 	return nil
 }

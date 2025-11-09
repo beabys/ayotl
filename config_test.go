@@ -50,7 +50,7 @@ func TestConfig(t *testing.T) {
 		os.Unsetenv("CONFIG_FILE")
 		mock := &MockConfig{}
 		config := New().SetConfigImpl(mock)
-		assert.ErrorContains(t, config.LoadConfigs("./../env.configuration.json"), "Fail to load configs")
+		assert.ErrorContains(t, config.LoadConfigs("./../env.configuration.json"), "fail to load configs")
 	})
 
 	t.Run("Test Loading configs", func(t *testing.T) {
@@ -201,9 +201,9 @@ func (mc *MockConfig) SetDefaults() ConfigMap {
 }
 
 func createTestConfigFile(path, filename, data string) (string, error) {
-	testpath := path + randomString(8)
-	config := testpath + filename
-	err := os.MkdirAll(testpath, os.ModePerm)
+	testPath := path + randomString(8)
+	config := testPath + filename
+	err := os.MkdirAll(testPath, os.ModePerm)
 	if err != nil {
 		return "", err
 	}
@@ -212,16 +212,16 @@ func createTestConfigFile(path, filename, data string) (string, error) {
 		fmt.Printf("error creating file")
 		return "", err
 	}
-	return testpath, nil
+	return testPath, nil
 }
 
 // randomString return a random string
 func randomString(length int) string {
-	rand.Seed(time.Now().UnixNano())
+	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
 	chars := []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
 	var b strings.Builder
 	for i := 0; i < length; i++ {
-		b.WriteRune(chars[rand.Intn(len(chars))])
+		b.WriteRune(chars[seededRand.Intn(len(chars))])
 	}
 	return b.String()
 }
