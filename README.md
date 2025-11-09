@@ -1,6 +1,6 @@
 # Ayotl
 
-Ayotl is a simple implementation intended to reduce the complexity to manage local configuration files, mapping into defined structs.
+Ayotl is a lightweight library designed to simplify the management of local configuration files by mapping their contents into well-defined Go structs.
 
 
 ## Config Files
@@ -9,7 +9,7 @@ Ayotl is a simple implementation intended to reduce the complexity to manage loc
 - yaml
 - json
 
-Example of a config json file:
+### Example of a config json file:
 
 ```json
 {
@@ -30,8 +30,8 @@ Example of a config json file:
 }
 ```
 ## Environment variables
-Environment variables depend on a [config file](#config-files).
-you can create your config file with placeholders similar to this:
+Configuration values can be sourced from environment variables using placeholders in your config file:
+
 ```json
 {
     "stage": "${STAGE}",
@@ -50,7 +50,9 @@ you can create your config file with placeholders similar to this:
         "enabled": true,
 }
 ```
-assuming your environment variables are like this:
+
+Set your environment variables as follows:
+
 ```bash
 STAGE=development
 APPLICATION_PORT=3001
@@ -60,34 +62,13 @@ LOGIN_SERVICE_PORT=3002
 LOGIN_SERVICE_USER=1234
 LOGIN_SERVICE_PASSWORD=5678
 ```
-If any environment doesn't exist or can not be found, this will be replaced as an empty string.
+
+If an environment variable is not set, its value will default to an empty string.
 
 ## Integration
 
-You should have a struct with a struct tag `mapstructure`
+Define your configuration struct using the `mapstructure` struct tag. For example:
 
-following with the example of
-
-```json
-{
-    "stage": "development",
-    "app": {
-        "host": "127.0.0.1",
-        "port": 3001
-    },
-    "services": {
-        "login": {
-            "host": "127.0.0.1",
-            "port": 3002,
-            "user": "123",
-            "password": "4567",
-        },
-        "enabled": true,
-    }
-}
-```
-
-You can define a struct similar to:
 ```go
 type Config struct {
 	Stage    string        `mapstructure:"stage"`
@@ -115,8 +96,8 @@ type LoginService struct {
 ```
 
 ### Default Values
-Sometimes is required to have default values in case we don't need to set them inside a config file
-for those cases, you should implement those default values in the function `Setdefaults`.
+
+To specify default values for configuration fields, implement the `SetDefaults` function:
 
 ```go
 func (c *Config) SetDefaults() ConfigMap {
@@ -131,4 +112,4 @@ func (c *Config) SetDefaults() ConfigMap {
 ```
 Using the `dot-notation` can set the default value, this will be appended in the struct if this config value doesn't exist in our config file.
 
-if those values are defied in our config file, those will be overrided for the one existing in the config file
+if those values are defied in our config file, those will be overridden for the one existing in the config file
