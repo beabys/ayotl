@@ -10,4 +10,5 @@ type Config struct {
 	ConfigMap    ConfigMap
 	EnvConfigMap ConfigMap
 	configImpl   Configuration
+	immutable    bool
 }

@@ -119,6 +119,38 @@ func (c *Config) SetDefaults() ConfigMap {
 
 ---
 
+## Immutability
+
+Lock the config after loading to prevent accidental mutations at runtime:
+
+```go
+config := config.New().
+    SetConfigImpl(&myConfig).
+    LoadConfigs("config.json")
+
+config.Immutable()
+
+// Any mutation attempt becomes a no-op:
+config.Set("server.host", "will-not-stick")
+config.SetConfigMap(newMap)
+config.WithEnv("SOME_SECRET")
+```
+
+`Immutable()` can also be called **before** `LoadConfigs()` — loading still works, but all post-load writes are blocked:
+
+```go
+config := config.New().
+    SetConfigImpl(&myConfig).
+    Immutable().          // ← called before loading
+    LoadConfigs()         // ← still works
+
+config.Set("server.host", "blocked")  // ← no-op
+```
+
+`SetDefault()` is also blocked after `Immutable()`, since it delegates to `Set()`. Only `Get`, `Must*`, and `Unmarshal` remain available.
+
+---
+
 ## Unmarshal
 
 After loading, unmarshal the resolved values into your struct:
