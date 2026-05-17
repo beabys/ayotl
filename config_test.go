@@ -25,6 +25,25 @@ type MockLoggerConfig struct {
 	Level       string `mapstructure:"log_level"`
 }
 
+// EnvOnlyConfig is used for testing env-only loading.
+type EnvOnlyConfig struct {
+	Server  EnvServerConfig  `mapstructure:"server"`
+	Logger  *EnvLoggerConfig `mapstructure:"logger"`
+	Timeout int              `mapstructure:"timeout"`
+}
+
+// EnvServerConfig holds server-related env-only config.
+type EnvServerConfig struct {
+	Host  string `mapstructure:"host"`
+	Port  int    `mapstructure:"port"`
+	Debug bool   `mapstructure:"debug"`
+}
+
+// EnvLoggerConfig holds logger-related env-only config.
+type EnvLoggerConfig struct {
+	Level string `mapstructure:"level"`
+}
+
 func TestConfig(t *testing.T) {
 
 	path := "./testConfig/"
@@ -190,6 +209,70 @@ func TestMustFunctions(t *testing.T) {
 		assert.Equal(t, val, required)
 		os.Unsetenv("ANY")
 	})
+}
+
+func TestLoadEnvOnly(t *testing.T) {
+	// Set env vars matching the struct's mapstructure tags
+	t.Setenv("SERVER_HOST", "localhost")
+	t.Setenv("SERVER_PORT", "8080")
+	t.Setenv("SERVER_DEBUG", "true")
+	t.Setenv("LOGGER_LEVEL", "debug")
+	t.Setenv("TIMEOUT", "30")
+
+	mock := &EnvOnlyConfig{}
+	config := New().SetConfigImpl(mock)
+	err := config.LoadConfigs()
+	assert.NoError(t, err)
+
+	// Verify values via Must functions
+	assert.Equal(t, "localhost", config.MustString("server.host", ""))
+	assert.Equal(t, 8080, config.MustInt("server.port", 0))
+	assert.Equal(t, true, config.MustBool("server.debug", false))
+	assert.Equal(t, "debug", config.MustString("logger.level", ""))
+	assert.Equal(t, 30, config.MustInt("timeout", 0))
+
+	// Verify values via Unmarshal
+	err = config.Unmarshal(mock)
+	assert.NoError(t, err)
+	assert.Equal(t, "localhost", mock.Server.Host)
+	assert.Equal(t, 8080, mock.Server.Port)
+	assert.True(t, mock.Server.Debug)
+	assert.NotNil(t, mock.Logger)
+	assert.Equal(t, "debug", mock.Logger.Level)
+	assert.Equal(t, 30, mock.Timeout)
+}
+
+func TestLoadEnvOnlyWithDefaults(t *testing.T) {
+	// Set only one env var
+	t.Setenv("SERVER_HOST", "example.com")
+
+	mock := &EnvOnlyConfig{}
+	config := New().SetConfigImpl(mock)
+	err := config.LoadConfigs()
+	assert.NoError(t, err)
+
+	// Env var overrides default
+	assert.Equal(t, "example.com", config.MustString("server.host", ""))
+
+	// Defaults should be set for fields not in env
+	assert.Equal(t, 9090, config.MustInt("server.port", 0))
+	assert.Equal(t, "info", config.MustString("logger.level", ""))
+	assert.Equal(t, 60, config.MustInt("timeout", 0))
+}
+
+func TestLoadEnvOnlyWithoutImpl(t *testing.T) {
+	config := New()
+	// Should not panic when no configImpl is set
+	err := config.LoadConfigs()
+	assert.NoError(t, err)
+}
+
+func (ec *EnvOnlyConfig) SetDefaults() ConfigMap {
+	return ConfigMap{
+		"server.port":   9090,
+		"logger.level":  "info",
+		"timeout":       60,
+	}
 }
 
 func (mc *MockConfig) SetDefaults() ConfigMap {
