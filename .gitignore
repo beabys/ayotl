@@ -8,3 +8,5 @@ docs/
 testConfig
 .testCoverage.*
 unit.html
+graphify-out/
+AGENTS.md

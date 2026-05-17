@@ -1,115 +1,151 @@
 # Ayotl
 
-Ayotl is a lightweight library designed to simplify the management of local configuration files by mapping their contents into well-defined Go structs.
+Ayotl is a lightweight Go library for loading configuration into well-defined structs.
+It supports **config files** (JSON/YAML), **environment variable placeholders** within those files, and **pure environment-variable mode** when no config file is needed.
 
+---
 
-## Config Files
+## Quick Start
 
-### supported config files
-- yaml
-- json
+```go
+import "github.com/beabys/ayotl"
 
-### Example of a config json file:
+type Config struct {
+	Server ServerConfig `mapstructure:"server"`
+	Logger LoggerConfig `mapstructure:"logger"`
+}
 
-```json
-{
-    "stage": "development",
-    "app": {
-        "host": "127.0.0.1",
-        "port": 3001
-    },
-    "services": {
-        "login": {
-            "host": "127.0.0.1",
-            "port": 3002,
-            "user": "123",
-            "password": "4567",
-        },
-        "enabled": true,
-    }
+type ServerConfig struct {
+	Host string `mapstructure:"host"`
+	Port int    `mapstructure:"port"`
+}
+
+type LoggerConfig struct {
+	Level string `mapstructure:"level"`
 }
 ```
-## Environment variables
-Configuration values can be sourced from environment variables using placeholders in your config file:
+
+## Modes
+
+### 1. Config File Mode
+
+Load values from a `.json`, `.yaml`, or `.yml` file:
+
+```go
+config := config.New().
+    SetConfigImpl(&myConfig).
+    LoadConfigs("config.json")
+```
+
+### 2. Environment-Only Mode (no file)
+
+Call `LoadConfigs()` with **no arguments**.
+The library walks your struct's `mapstructure` tags and reads matching env vars directly from the OS environment — **no need to call `.WithEnv()`**:
+
+| Struct path             | Env var              |
+|------------------------|----------------------|
+| `server.host`          | `SERVER_HOST`        |
+| `server.port`          | `SERVER_PORT`        |
+| `logger.level`         | `LOGGER_LEVEL`       |
+
+```go
+os.Setenv("SERVER_HOST", "localhost")
+os.Setenv("SERVER_PORT", "8080")
+os.Setenv("LOGGER_LEVEL", "debug")
+
+config := config.New().
+    SetConfigImpl(&myConfig).
+    LoadConfigs()   // ← no files, no WithEnv needed
+```
+
+Env var values are automatically converted to the target field type (string, int, bool, etc.).
+
+### 3. File Mode with Optional Placeholder Substitution
+
+Config values can be literal or reference env vars with `${VAR_NAME}`.
+The `${...}` notation is **optional** — you can mix literal values and placeholders freely in the same file:
 
 ```json
 {
     "stage": "${STAGE}",
     "app": {
-        "host": "${APPLICATION_HOST}",
+        "host": "127.0.0.1",
         "port": "${APPLICATION_PORT}"
-    },
-   
-    "services": {
-        "login": {
-            "host": "${LOGIN_SERVICE_HOST}",
-            "port": "${LOGIN_SERVICE_PORT}",
-            "user": "${LOGIN_SERVICE_USER}",
-            "password": "${LOGIN_SERVICE_PASSWORD}",
-        },
-        "enabled": true,
+    }
 }
 ```
 
-Set your environment variables as follows:
+Here `host` is a hardcoded literal, while `stage` and `port` will be replaced from env vars.
 
-```bash
-STAGE=development
-APPLICATION_PORT=3001
-APPLICATION_HOST=127.0.0.1
-LOGIN_SERVICE_HOST=127.0.0.1
-LOGIN_SERVICE_PORT=3002
-LOGIN_SERVICE_USER=1234
-LOGIN_SERVICE_PASSWORD=5678
-```
-
-If an environment variable is not set, its value will default to an empty string.
-
-## Integration
-
-Define your configuration struct using the `mapstructure` struct tag. For example:
+**`.WithEnv()` is only needed for this mode.** It loads environment variables into an internal map so `${PLACEHOLDER}` values can be resolved. By default it loads **all** environment variables:
 
 ```go
-type Config struct {
-	Stage    string        `mapstructure:"stage"`
-	App      App           `mapstructure:"app"`
-	Services Services      `mapstructure:"services"`
-}
-
-// ApplicationConfig is a struct to define configurations for the http server
-type App struct {
-	Host string `mapstructure:"host"`
-	Port int    `mapstructure:"port"`
-}
-
-// LoggerConfig is a struct to define configurations for Logger
-type Services struct {
-	Login   LoginService `mapstructure:"login"`
-}
-// LoggerConfig is a struct to define configurations for Logger
-type LoginService struct {
-	Host string     `mapstructure:"host"`
-	Port int        `mapstructure:"port"`
-	User string     `mapstructure:"user"`
-	Pass string     `mapstructure:"password"`
-}
+config := config.New().
+    SetConfigImpl(&myConfig).
+    WithEnv().                      // ← needed for ${...} substitution
+    LoadConfigs("config.json")
 ```
 
-### Default Values
+For security, restrict which env vars are loaded by passing explicit names.
+Only those vars will be available for substitution:
 
-To specify default values for configuration fields, implement the `SetDefaults` function:
+```go
+config := config.New().
+    SetConfigImpl(&myConfig).
+    WithEnv("STAGE", "APPLICATION_PORT").   // ← only these two
+    LoadConfigs("config.json")
+```
+
+If a referenced env var is not set (or not included in the filter), the placeholder resolves to an empty string.
+
+> **Note:** `.WithEnv()` is **not** used in environment-only mode (mode 2) — that mode reads `os.Getenv` directly via struct reflection.
+
+---
+
+## Default Values
+
+Implement `SetDefaults()` on your struct to provide fallback values in dot-notation.
+Defaults are applied only when the key is not already set (from file or env):
 
 ```go
 func (c *Config) SetDefaults() ConfigMap {
-    // create a new configMap
-	defaults := make(ConfigMap)
-	// application defaults values
-	defaults["services.login.host"] = "127.0.0.1"
-	defaults["services.login.port"] = "3002"
-    // return the default configMap with our mapping
-	return defaults
+    return ConfigMap{
+        "server.host":   "127.0.0.1",
+        "server.port":   "3000",
+        "logger.level":  "info",
+    }
 }
 ```
-Using the `dot-notation` can set the default value, this will be appended in the struct if this config value doesn't exist in our config file.
 
-if those values are defied in our config file, those will be overridden for the one existing in the config file
+---
+
+## Unmarshal
+
+After loading, unmarshal the resolved values into your struct:
+
+```go
+config := config.New().
+    SetConfigImpl(&myConfig).
+    LoadConfigs("config.json")
+
+if err := config.Unmarshal(&myConfig); err != nil {
+    log.Fatal(err)
+}
+```
+
+## Access values directly
+
+Use the `Must*` helpers to read values by dot-notation key:
+
+```go
+host := config.MustString("server.host", "localhost")
+port := config.MustInt("server.port", 3000)
+debug := config.MustBool("server.debug", false)
+```
+
+---
+
+## Struct tag requirement
+
+All configurable fields **must** have a `mapstructure` struct tag.
+Fields without a tag are ignored in both file and env-only modes.

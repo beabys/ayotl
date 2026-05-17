@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 
 	"github.com/spf13/cast"
@@ -29,6 +30,19 @@ func (c *Config) SetConfigImpl(impl Configuration) *Config {
 
 // LoadConfig is a function to load the configurations in ConfigMap
 func (c *Config) LoadConfigs(configFiles ...string) (err error) {
+	// If no config files provided, load only from env vars using struct reflection
+	if len(configFiles) == 0 {
+		// load env vars into ConfigMap using struct reflection first
+		c.loadEnvOnly()
+		// set defaults from configImpl for any keys not provided by env
+		if c.configImpl != nil {
+			for key, val := range c.configImpl.SetDefaults() {
+				c.SetDefault(key, val)
+			}
+		}
+		return nil
+	}
+
 	// validate if required files exist to start reading the configs
 	for _, configFile := range configFiles {
 		if configFile == "" {
@@ -226,4 +240,87 @@ func (c *Config) MustBool(key string, must bool) bool {
 func (c *Config) mergeEnvVariables() {
 	mergeENV := MergeEnvVar(c.ConfigMap, c.EnvConfigMap)
 	c.ConfigMap = mergeENV
+}
+
+// loadEnvOnly populates ConfigMap from environment variables using the struct's
+// mapstructure tags as a schema. No file loading is performed.
+// Requires configImpl to be set via SetConfigImpl. Uses os.Getenv directly.
+func (c *Config) loadEnvOnly() {
+	if c.configImpl == nil {
+		return
+	}
+
+	t := reflect.TypeOf(c.configImpl)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return
+	}
+
+	c.walkStructForEnv(t, "")
+}
+
+// walkStructForEnv recursively walks a struct type and maps env vars to ConfigMap keys.
+func (c *Config) walkStructForEnv(t reflect.Type, prefix string) {
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+
+		// Skip unexported fields
+		if !field.IsExported() {
+			continue
+		}
+
+		// Get mapstructure tag
+		tag, ok := field.Tag.Lookup("mapstructure")
+		if !ok || tag == "" {
+			continue
+		}
+
+		// Build dot-notation key
+		dotKey := tag
+		if prefix != "" {
+			dotKey = prefix + "." + tag
+		}
+
+		// Build env var name: uppercase dot-notation joined with _
+		envKey := strings.ToUpper(strings.ReplaceAll(dotKey, ".", "_"))
+
+		ft := field.Type
+		// Dereference pointer types
+		if ft.Kind() == reflect.Ptr {
+			ft = ft.Elem()
+		}
+
+		// Recurse into nested structs
+		if ft.Kind() == reflect.Struct {
+			c.walkStructForEnv(ft, dotKey)
+			continue
+		}
+
+		// Leaf field - look up env var
+		envVal := os.Getenv(envKey)
+		if envVal == "" {
+			continue
+		}
+
+		// Convert based on field type using cast
+		var val interface{}
+		switch ft.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			val = cast.ToInt64(envVal)
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			val = cast.ToUint(envVal)
+		case reflect.Float32, reflect.Float64:
+			val = cast.ToFloat64(envVal)
+		case reflect.Bool:
+			val = cast.ToBool(envVal)
+		case reflect.String:
+			val = cast.ToString(envVal)
+		default:
+			val = cast.ToString(envVal)
+		}
+		c.Set(dotKey, val)
+
+	}
 }
