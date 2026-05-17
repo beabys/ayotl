@@ -19,6 +19,9 @@ func New() *Config {
 }
 
 func (c *Config) SetConfigMap(cm ConfigMap) *Config {
+	if c.immutable {
+		return c
+	}
 	c.ConfigMap = cm
 	return c
 }
@@ -37,7 +40,9 @@ func (c *Config) LoadConfigs(configFiles ...string) (err error) {
 		// set defaults from configImpl for any keys not provided by env
 		if c.configImpl != nil {
 			for key, val := range c.configImpl.SetDefaults() {
-				c.SetDefault(key, val)
+				if !c.isSet(key) {
+					c.set(key, val)
+				}
 			}
 		}
 		return nil
@@ -57,7 +62,9 @@ func (c *Config) LoadConfigs(configFiles ...string) (err error) {
 	// set default values from the implementation
 	if c.configImpl != nil {
 		for key, val := range c.configImpl.SetDefaults() {
-			c.SetDefault(key, val)
+			if !c.isSet(key) {
+				c.set(key, val)
+			}
 		}
 	}
 
@@ -87,6 +94,9 @@ func (c *Config) getLocalConfigs(configFiles ...string) error {
 // ConfigFileMerge read configs from file and merge the config into ConfigMap
 // if Key exist previosly in ConfigMap, the value will be overridden by the value from the file
 func (c *Config) ConfigFileMerge(s string) error {
+	if c.immutable {
+		return nil
+	}
 	if c.ConfigMap == nil {
 		c.ConfigMap = make(ConfigMap)
 	}
@@ -108,10 +118,30 @@ func (c *Config) getEnv(k string) interface{} {
 	return GetValue(c.EnvConfigMap, []string{k})
 }
 
-// Set add or update value from given key
-// key can be passed in `dot-notation`
-func (c *Config) Set(k string, v interface{}) {
+// set applies a value to ConfigMap bypassing the immutability guard.
+// Used internally by LoadConfigs and loadEnvOnly during the loading phase.
+func (c *Config) set(k string, v interface{}) {
 	SetValue(c.ConfigMap, strings.Split(k, "."), v)
+}
+
+// Set add or update value from given key.
+// key can be passed in `dot-notation`.
+// If Immutable() has been called, Set is a no-op.
+func (c *Config) Set(k string, v interface{}) {
+	if c.immutable {
+		return
+	}
+	c.set(k, v)
+}
+
+// Immutable prevents any future mutation to the Config.
+// After calling Immutable, Set, SetConfigMap, ConfigFileMerge,
+// and WithEnv become no-ops.
+// LoadConfigs still works when called after Immutable — it uses
+// internal write paths to apply defaults and env vars.
+func (c *Config) Immutable() *Config {
+	c.immutable = true
+	return c
 }
 
 func (c *Config) isSet(k string) bool {
@@ -133,6 +163,9 @@ func (c *Config) SetDefault(key string, val interface{}) {
 
 // WithEnv Load env variables and add into ConfigMap
 func (c *Config) WithEnv(envs ...string) *Config {
+	if c.immutable {
+		return c
+	}
 	if c.EnvConfigMap == nil {
 		c.EnvConfigMap = make(ConfigMap)
 	}
@@ -320,7 +353,7 @@ func (c *Config) walkStructForEnv(t reflect.Type, prefix string) {
 		default:
 			val = cast.ToString(envVal)
 		}
-		c.Set(dotKey, val)
+		c.set(dotKey, val)
 
 	}
 }

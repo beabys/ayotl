@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -53,7 +54,7 @@ func TestConfig(t *testing.T) {
 		configMap := make(ConfigMap)
 		envConfigMap := make(ConfigMap)
 		config := New().SetConfigImpl(mock).SetConfigMap(configMap).WithEnv()
-		var want = &Config{configMap, envConfigMap, mock}
+		want := &Config{ConfigMap: configMap, EnvConfigMap: envConfigMap, configImpl: mock}
 		want.WithEnv()
 		areEqual := assert.ObjectsAreEqual(config, want)
 		assert.True(t, areEqual)
@@ -265,6 +266,82 @@ func TestLoadEnvOnlyWithoutImpl(t *testing.T) {
 	// Should not panic when no configImpl is set
 	err := config.LoadConfigs()
 	assert.NoError(t, err)
+}
+
+func TestImmutableBlocksSet(t *testing.T) {
+	mock := &EnvOnlyConfig{}
+	config := New().SetConfigImpl(mock)
+	err := config.LoadConfigs()
+	assert.NoError(t, err)
+
+	// Sanity check: Set works before Immutable
+	config.Set("server.host", "should-work")
+	assert.Equal(t, "should-work", config.MustString("server.host", ""))
+
+	// Now lock it
+	config.Immutable()
+
+	// Set should be a no-op
+	config.Set("server.host", "should-not-work")
+	assert.Equal(t, "should-work", config.MustString("server.host", ""))
+}
+
+func TestImmutableAllowsLoadConfigs(t *testing.T) {
+	t.Setenv("SERVER_HOST", "immutable-load-test")
+	t.Setenv("SERVER_PORT", "3000")
+
+	mock := &EnvOnlyConfig{}
+	config := New().SetConfigImpl(mock).Immutable()
+
+	// LoadConfigs must still work even after Immutable
+	err := config.LoadConfigs()
+	assert.NoError(t, err)
+
+	// Values from env vars should be present
+	assert.Equal(t, "immutable-load-test", config.MustString("server.host", ""))
+	assert.Equal(t, 3000, config.MustInt("server.port", 0))
+
+	// Post-load Set should be blocked
+	config.Set("server.host", "blocked")
+	assert.Equal(t, "immutable-load-test", config.MustString("server.host", ""))
+}
+
+func TestImmutableBlocksSetConfigMap(t *testing.T) {
+	mock := &EnvOnlyConfig{}
+	config := New().SetConfigImpl(mock)
+	_ = config.LoadConfigs()
+	config.Immutable()
+
+	config.SetConfigMap(ConfigMap{"server.host": "nope"})
+	assert.NotEqual(t, "nope", config.MustString("server.host", ""))
+}
+
+func TestImmutableBlocksWithEnv(t *testing.T) {
+	t.Setenv("SHOULD_NOT_LOAD", "secret")
+	mock := &EnvOnlyConfig{}
+	config := New().SetConfigImpl(mock)
+	_ = config.LoadConfigs()
+	config.Immutable()
+
+	// WithEnv should be a no-op when immutable
+	config.WithEnv()
+	assert.Equal(t, "", config.MustString("SHOULD_NOT_LOAD", ""))
+}
+
+func TestImmutableBlocksConfigFileMerge(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test.json")
+	assert.NoError(t, os.WriteFile(path, []byte(`{"server":{"host":"from-file"}}`), 0644))
+
+	mock := &EnvOnlyConfig{}
+	config := New().SetConfigImpl(mock)
+	_ = config.LoadConfigs()
+	config.Immutable()
+
+	// ConfigFileMerge should be a no-op when immutable
+	err := config.ConfigFileMerge(path)
+	assert.NoError(t, err)
+	assert.NotEqual(t, "from-file", config.MustString("server.host", ""))
 }
 
 func (ec *EnvOnlyConfig) SetDefaults() ConfigMap {
