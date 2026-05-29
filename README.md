@@ -1,6 +1,6 @@
 # Ayotl
 
-<img src="./ayotl.svg" alt="Ayotl Logo" width="128" align="center" />
+<img src="./assets/ayotl.svg" alt="Ayotl Logo" width="128" align="center" />
 
 Ayotl is a lightweight Go library for loading configuration.
 It supports **config files** (JSON / YAML / INI), **environment variable placeholders** within those files,
@@ -240,3 +240,38 @@ then falls back to `ConfigMap`. If neither has the key, the default value is ret
 
 All configurable fields **must** have a `mapstructure` struct tag.
 Fields without a tag are ignored in both file and env-only modes.
+
+---
+
+## Benchmarks
+
+```mermaid
+xychart-beta
+    title "Memory per operation (bytes)"
+    x-axis ["New", "MustStr", "Unmarshal", "JSON file", "INI file", "YAML file", "WithEnv (X)", "WithEnv"]
+    y-axis "Bytes" 0 --> 16000
+    bar [96, 64, 1704, 2944, 10624, 12160, 200, 14200]
+```
+
+Results on Apple M1, Go 1.26 (lower is better). Run locally with:
+
+```bash
+go test -bench=BenchmarkAyotl -benchmem .
+```
+
+| Operation | Time (ns/op) | Bytes/op | Allocs/op |
+|-----------|-------------|----------|-----------|
+| `New()` | 46 | 96 | 2 |
+| `WithEnv()` (load all env vars) | 8,189 | 14,200 | 148 |
+| `LoadConfigs()` — env-only | 8,257 | 14,920 | 154 |
+| `LoadConfigs()` — JSON file | 18,915 | 2,944 | 35 |
+| `LoadConfigs()` — YAML file | 26,342 | 12,160 | 121 |
+| `LoadConfigs()` — INI file | 20,975 | 10,624 | 79 |
+| `LoadConfigs()` — JSON + `${...}` placeholders | 27,142 | 16,776 | 176 |
+| `MustString("server.host", "")` | 101 | 64 | 2 |
+| `Unmarshal(&myConfig)` | 1,995 | 1,704 | 34 |
+
+Numbers on a typical machine with ~30 env vars.
+`WithEnv("VAR1", "VAR2")` loads only the specified vars instead of all `os.Environ()` — ~200 B instead of ~14 K.
+
+---
