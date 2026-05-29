@@ -173,7 +173,7 @@ func (c *Config) setDefaults() {
 
 // WithEnv Load env variables and add into ConfigMap
 func (c *Config) WithEnv(envs ...string) *Config {
-	if c.immutable {
+	if c.immutable || c.envLoaded {
 		return c
 	}
 	if c.EnvConfigMap == nil {
