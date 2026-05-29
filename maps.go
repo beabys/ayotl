@@ -156,10 +156,11 @@ func SetValue(m map[string]interface{}, keysToFind []string, value interface{}) 
 	default:
 		// if still has more keys, override the current value with
 		// with a new nested map[string]interface{}
+		val = value
 		if len(next) > 0 {
 			val = SetValue(make(map[string]interface{}), next, value)
 		}
-		// create the new key in the map
+		// create or update the key in the map
 		m[keyVal] = val
 
 	}

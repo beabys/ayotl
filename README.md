@@ -1,121 +1,157 @@
 # Ayotl
 
-Ayotl is a lightweight Go library for loading configuration into well-defined structs.
-It supports **config files** (JSON/YAML), **environment variable placeholders** within those files, and **pure environment-variable mode** when no config file is needed.
+Ayotl is a lightweight Go library for loading configuration.
+It supports **config files** (JSON / YAML / INI), **environment variable placeholders** within those files,
+and **environment-only mode** for when no config file is needed — without forcing you
+to implement any interface.
+
+```go
+import "github.com/beabys/ayotl"
+```
 
 ---
 
 ## Quick Start
 
 ```go
-import "github.com/beabys/ayotl"
-
-type Config struct {
-	Server ServerConfig `mapstructure:"server"`
-	Logger LoggerConfig `mapstructure:"logger"`
-}
-
+// 1. Define your config struct with mapstructure tags
 type ServerConfig struct {
 	Host string `mapstructure:"host"`
 	Port int    `mapstructure:"port"`
 }
-
-type LoggerConfig struct {
-	Level string `mapstructure:"level"`
+type Config struct {
+	Server ServerConfig `mapstructure:"server"`
 }
+//                                                 
+// 2. Create a new config, load from file, unmarshal
+cfg := config.New().WithEnv().LoadConfigs("config.json")
+cfg.Unmarshal(&myConfig)
 ```
+
+No struct methods to implement. No interface to satisfy.
+Just set fields on `config.Config` and call load.
+
+---
 
 ## Modes
 
-### 1. Config File Mode
+### 1. Config File Mode — JSON / YAML / INI
 
-Load values from a `.json`, `.yaml`, or `.yml` file:
+Load values from a `.json`, `.yaml`, `.yml`, or `.ini` file:
 
 ```go
-config := config.New().
-    SetConfigImpl(&myConfig).
+cfg := config.New().
+    WithEnv().
     LoadConfigs("config.json")
 ```
 
-### 2. Environment-Only Mode (no file)
-
-Call `LoadConfigs()` with **no arguments**.
-The library walks your struct's `mapstructure` tags and reads matching env vars directly from the OS environment — **no need to call `.WithEnv()`**:
-
-| Struct path             | Env var              |
-|------------------------|----------------------|
-| `server.host`          | `SERVER_HOST`        |
-| `server.port`          | `SERVER_PORT`        |
-| `logger.level`         | `LOGGER_LEVEL`       |
-
-```go
-os.Setenv("SERVER_HOST", "localhost")
-os.Setenv("SERVER_PORT", "8080")
-os.Setenv("LOGGER_LEVEL", "debug")
-
-config := config.New().
-    SetConfigImpl(&myConfig).
-    LoadConfigs()   // ← no files, no WithEnv needed
-```
-
-Env var values are automatically converted to the target field type (string, int, bool, etc.).
-
-### 3. File Mode with Optional Placeholder Substitution
-
-Config values can be literal or reference env vars with `${VAR_NAME}`.
-The `${...}` notation is **optional** — you can mix literal values and placeholders freely in the same file:
+Config files support **optional** `${PLACEHOLDER}` substitution.
+Use `WithEnv()` to load env vars for placeholder resolution:
 
 ```json
 {
     "stage": "${STAGE}",
     "app": {
         "host": "127.0.0.1",
-        "port": "${APPLICATION_PORT}"
+        "port": "${APP_PORT}"
     }
 }
 ```
 
-Here `host` is a hardcoded literal, while `stage` and `port` will be replaced from env vars.
+```go
+cfg := config.New().
+    WithEnv().
+    LoadConfigs("config.json")
+// stage = os.Getenv("STAGE"), app.port = os.Getenv("APP_PORT")
+```
 
-**`.WithEnv()` is only needed for this mode.** It loads environment variables into an internal map so `${PLACEHOLDER}` values can be resolved. By default it loads **all** environment variables:
+Restrict which env vars are available for substitution for security:
 
 ```go
-config := config.New().
-    SetConfigImpl(&myConfig).
-    WithEnv().                      // ← needed for ${...} substitution
+cfg := config.New().
+    WithEnv("STAGE", "APP_PORT").  // ← only these two
     LoadConfigs("config.json")
 ```
 
-For security, restrict which env vars are loaded by passing explicit names.
-Only those vars will be available for substitution:
+If a referenced placeholder is not set (or filtered out), it resolves to empty string.
+
+---
+
+### 2. Environment-Only Mode — no files
+
+Call `LoadConfigs()` with **no arguments**.
+Env vars are loaded into `ConfigMap` via an explicit alias:
 
 ```go
-config := config.New().
-    SetConfigImpl(&myConfig).
-    WithEnv("STAGE", "APPLICATION_PORT").   // ← only these two
-    LoadConfigs("config.json")
+cfg := config.New()
+cfg.EnvAlias = config.ConfigEnvAlias{
+    "SERVER_HOST": "server.host",
+    "SERVER_PORT": "server.port",
+}
+cfg.WithEnv().LoadConfigs()
+
+fmt.Println(cfg.MustString("server.host", ""))  // "localhost"
 ```
 
-If a referenced env var is not set (or not included in the filter), the placeholder resolves to an empty string.
+`EnvAlias` maps env var names to dot-notation config keys.
+Only env vars listed in the alias are placed into `ConfigMap`.
 
-> **Note:** `.WithEnv()` is **not** used in environment-only mode (mode 2) — that mode reads `os.Getenv` directly via struct reflection.
+> **Note:** `LoadConfigs()` calls `WithEnv()` internally if env vars
+> haven't been loaded yet, so you can omit the explicit `WithEnv()` call:
+>
+> ```go
+> cfg := config.New()
+> cfg.EnvAlias = config.ConfigEnvAlias{
+>     "SERVER_HOST": "server.host",
+> }
+> cfg.LoadConfigs()  // ← WithEnv called internally
+> ```
 
 ---
 
 ## Default Values
 
-Implement `SetDefaults()` on your struct to provide fallback values in dot-notation.
-Defaults are applied only when the key is not already set (from file or env):
+Set fallback values via the `Defaults` field.
+Defaults are applied **before** env alias overrides,
+so env vars always take precedence:
 
 ```go
-func (c *Config) SetDefaults() ConfigMap {
-    return ConfigMap{
-        "server.host":   "127.0.0.1",
-        "server.port":   "3000",
-        "logger.level":  "info",
-    }
+cfg := config.New()
+cfg.Defaults = config.ConfigMap{
+    "server.host":   "127.0.0.1",
+    "server.port":   3000,
+    "logger.level":  "info",
 }
+cfg.LoadConfigs()
 ```
+
+Defaults and env alias can be combined freely.
+Env vars that match an alias key override the default.
+Keys not set by env keep their default.
+
+---
+
+## Constructor: `NewWithParams`
+
+Batch-set `Defaults` and `EnvAlias` at construction time:
+
+```go
+cfg := config.NewWithParams(&config.Params{
+    Defaults: config.ConfigMap{
+        "server.port":  9090,
+        "logger.level": "info",
+    },
+    EnvAlias: config.ConfigEnvAlias{
+        "SERVER_HOST": "server.host",
+        "SERVER_PORT": "server.port",
+    },
+})
+cfg.WithEnv().LoadConfigs()
+```
+
+`NewWithParams` does not modify `ConfigMap` or `EnvConfigMap` —
+it only sets `Defaults` and `EnvAlias`. Loading still happens
+when you call `LoadConfigs()`.
 
 ---
 
@@ -124,56 +160,74 @@ func (c *Config) SetDefaults() ConfigMap {
 Lock the config after loading to prevent accidental mutations at runtime:
 
 ```go
-config := config.New().
-    SetConfigImpl(&myConfig).
-    LoadConfigs("config.json")
+cfg := config.New()
+cfg.Defaults = config.ConfigMap{"server.host": "original"}
+cfg.LoadConfigs()
 
-config.Immutable()
+cfg.Immutable()
 
-// Any mutation attempt becomes a no-op:
-config.Set("server.host", "will-not-stick")
-config.SetConfigMap(newMap)
-config.WithEnv("SOME_SECRET")
+// All mutations become no-ops:
+cfg.Set("server.host", "will-not-stick")
+cfg.SetConfigMap(newMap)
+cfg.WithEnv("SOME_SECRET")
 ```
 
-`Immutable()` can also be called **before** `LoadConfigs()` — loading still works, but all post-load writes are blocked:
+`Immutable()` can be called **before** `LoadConfigs()` —
+loading still works (env vars and defaults are applied),
+but all post-load writes are blocked:
 
 ```go
-config := config.New().
-    SetConfigImpl(&myConfig).
-    Immutable().          // ← called before loading
+cfg := config.New()
+cfg.EnvAlias = config.ConfigEnvAlias{
+    "SERVER_HOST": "server.host",
+}
+cfg.Immutable().
     LoadConfigs()         // ← still works
 
-config.Set("server.host", "blocked")  // ← no-op
+cfg.Set("server.host", "blocked")  // ← no-op
 ```
 
-`SetDefault()` is also blocked after `Immutable()`, since it delegates to `Set()`. Only `Get`, `Must*`, and `Unmarshal` remain available.
+After `Immutable()`, only `Get`, `Must*`, and `Unmarshal` remain available.
 
 ---
 
 ## Unmarshal
 
-After loading, unmarshal the resolved values into your struct:
+After loading, decode the resolved `ConfigMap` into your typed struct:
 
 ```go
-config := config.New().
-    SetConfigImpl(&myConfig).
-    LoadConfigs("config.json")
+type Config struct {
+    Server ServerConfig `mapstructure:"server"`
+}
+type ServerConfig struct {
+    Host string `mapstructure:"host"`
+    Port int    `mapstructure:"port"`
+}
 
-if err := config.Unmarshal(&myConfig); err != nil {
+var myConfig Config
+cfg := config.New().WithEnv().LoadConfigs("config.json")
+if err := cfg.Unmarshal(&myConfig); err != nil {
     log.Fatal(err)
 }
+fmt.Println(myConfig.Server.Host)
 ```
+
+All fields need `mapstructure` struct tags to be recognized.
+
+---
 
 ## Access values directly
 
 Use the `Must*` helpers to read values by dot-notation key:
 
 ```go
-host := config.MustString("server.host", "localhost")
-port := config.MustInt("server.port", 3000)
-debug := config.MustBool("server.debug", false)
+host  := cfg.MustString("server.host", "localhost")
+port  := cfg.MustInt("server.port", 3000)
+debug := cfg.MustBool("server.debug", false)
 ```
+
+`Must*` checks `EnvConfigMap` first (env vars loaded by `WithEnv`),
+then falls back to `ConfigMap`. If neither has the key, the default value is returned.
 
 ---
 

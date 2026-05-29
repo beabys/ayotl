@@ -3,13 +3,12 @@ package config
 import (
 	"fmt"
 	"os"
-	"reflect"
 	"strings"
 
 	"github.com/spf13/cast"
 )
 
-// New return  a New Config
+// New returns a new Config instance with empty ConfigMap and EnvConfigMap.
 func New() *Config {
 	c := &Config{}
 	//create a default ConfigMap
@@ -18,6 +17,17 @@ func New() *Config {
 	return c
 }
 
+// NewWithParams returns a new Config instance with provided defaults and env alias.
+func NewWithParams(params *Params) *Config {
+	c := &Config{}
+	c.ConfigMap = make(ConfigMap)
+	c.EnvConfigMap = make(ConfigMap)
+	c.Defaults = params.Defaults
+	c.EnvAlias = params.EnvAlias
+	return c
+}
+
+// SetConfigMap sets the entire ConfigMap. If the Config is immutable, this is a no-op.
 func (c *Config) SetConfigMap(cm ConfigMap) *Config {
 	if c.immutable {
 		return c
@@ -26,22 +36,24 @@ func (c *Config) SetConfigMap(cm ConfigMap) *Config {
 	return c
 }
 
-func (c *Config) SetConfigImpl(impl Configuration) *Config {
-	c.configImpl = impl
-	return c
-}
-
 // LoadConfig is a function to load the configurations in ConfigMap
+// from the provided config files, and merge with env variables if exist
+// If no config files provided, apply defaults + env alias overrides
+// This is a convenience method that calls LoadConfigs with the provided files.
 func (c *Config) LoadConfigs(configFiles ...string) (err error) {
-	// If no config files provided, load only from env vars using struct reflection
+	// If no config files provided, apply defaults + env alias overrides
 	if len(configFiles) == 0 {
-		// load env vars into ConfigMap using struct reflection first
-		c.loadEnvOnly()
-		// set defaults from configImpl for any keys not provided by env
-		if c.configImpl != nil {
-			for key, val := range c.configImpl.SetDefaults() {
-				if !c.isSet(key) {
-					c.set(key, val)
+		// Temporarily disable immutability to allow env var merging
+		immutable := c.immutable
+		c.immutable = false
+		defer func() { c.immutable = immutable }() // Restore immutability after merging
+		c.setDefaults()
+		c.WithEnv() // Load all env vars if not already loaded
+		if len(c.EnvAlias) > 0 {
+			// itterate over the alias and set the values from env variables into the config map
+			for envKey, dotKey := range c.EnvAlias {
+				if envVal, ok := c.EnvConfigMap[envKey]; ok {
+					c.Set(dotKey, envVal)
 				}
 			}
 		}
@@ -60,13 +72,7 @@ func (c *Config) LoadConfigs(configFiles ...string) (err error) {
 	}
 
 	// set default values from the implementation
-	if c.configImpl != nil {
-		for key, val := range c.configImpl.SetDefaults() {
-			if !c.isSet(key) {
-				c.set(key, val)
-			}
-		}
-	}
+	c.setDefaults()
 
 	// load the configs from file
 	if err := c.getLocalConfigs(configFiles...); err != nil {
@@ -80,15 +86,6 @@ func (c *Config) LoadConfigs(configFiles ...string) (err error) {
 
 	return nil
 
-}
-
-func (c *Config) getLocalConfigs(configFiles ...string) error {
-	for _, s := range configFiles {
-		if err := c.ConfigFileMerge(s); err != nil {
-			return fmt.Errorf("fail to load configs from file %s: %w", s, err)
-		}
-	}
-	return nil
 }
 
 // ConfigFileMerge read configs from file and merge the config into ConfigMap
@@ -114,12 +111,21 @@ func (c *Config) Get(k string) interface{} {
 	return GetValue(c.ConfigMap, strings.Split(k, "."))
 }
 
+func (c *Config) getLocalConfigs(configFiles ...string) error {
+	for _, s := range configFiles {
+		if err := c.ConfigFileMerge(s); err != nil {
+			return fmt.Errorf("fail to load configs from file %s: %w", s, err)
+		}
+	}
+	return nil
+}
+
 func (c *Config) getEnv(k string) interface{} {
 	return GetValue(c.EnvConfigMap, []string{k})
 }
 
 // set applies a value to ConfigMap bypassing the immutability guard.
-// Used internally by LoadConfigs and loadEnvOnly during the loading phase.
+// Used internally by LoadConfigs during the loading phase.
 func (c *Config) set(k string, v interface{}) {
 	SetValue(c.ConfigMap, strings.Split(k, "."), v)
 }
@@ -154,10 +160,14 @@ func (c *Config) isSetEnv(k string) bool {
 	return value != nil
 }
 
-func (c *Config) SetDefault(key string, val interface{}) {
-	// if key don't exist we add it
-	if !c.isSet(key) {
-		c.Set(key, val)
+func (c *Config) setDefaults() {
+	if len(c.Defaults) > 0 {
+		// 1. Apply defaults
+		for key, val := range c.Defaults {
+			if !c.isSet(key) {
+				c.Set(key, val)
+			}
+		}
 	}
 }
 
@@ -175,6 +185,7 @@ func (c *Config) WithEnv(envs ...string) *Config {
 			c.EnvConfigMap[env[0]] = env[1]
 		}
 	}
+	c.envLoaded = true
 	return c
 }
 
@@ -273,87 +284,4 @@ func (c *Config) MustBool(key string, must bool) bool {
 func (c *Config) mergeEnvVariables() {
 	mergeENV := MergeEnvVar(c.ConfigMap, c.EnvConfigMap)
 	c.ConfigMap = mergeENV
-}
-
-// loadEnvOnly populates ConfigMap from environment variables using the struct's
-// mapstructure tags as a schema. No file loading is performed.
-// Requires configImpl to be set via SetConfigImpl. Uses os.Getenv directly.
-func (c *Config) loadEnvOnly() {
-	if c.configImpl == nil {
-		return
-	}
-
-	t := reflect.TypeOf(c.configImpl)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	if t.Kind() != reflect.Struct {
-		return
-	}
-
-	c.walkStructForEnv(t, "")
-}
-
-// walkStructForEnv recursively walks a struct type and maps env vars to ConfigMap keys.
-func (c *Config) walkStructForEnv(t reflect.Type, prefix string) {
-	for i := 0; i < t.NumField(); i++ {
-		field := t.Field(i)
-
-		// Skip unexported fields
-		if !field.IsExported() {
-			continue
-		}
-
-		// Get mapstructure tag
-		tag, ok := field.Tag.Lookup("mapstructure")
-		if !ok || tag == "" {
-			continue
-		}
-
-		// Build dot-notation key
-		dotKey := tag
-		if prefix != "" {
-			dotKey = prefix + "." + tag
-		}
-
-		// Build env var name: uppercase dot-notation joined with _
-		envKey := strings.ToUpper(strings.ReplaceAll(dotKey, ".", "_"))
-
-		ft := field.Type
-		// Dereference pointer types
-		if ft.Kind() == reflect.Ptr {
-			ft = ft.Elem()
-		}
-
-		// Recurse into nested structs
-		if ft.Kind() == reflect.Struct {
-			c.walkStructForEnv(ft, dotKey)
-			continue
-		}
-
-		// Leaf field - look up env var
-		envVal := os.Getenv(envKey)
-		if envVal == "" {
-			continue
-		}
-
-		// Convert based on field type using cast
-		var val interface{}
-		switch ft.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			val = cast.ToInt64(envVal)
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			val = cast.ToUint(envVal)
-		case reflect.Float32, reflect.Float64:
-			val = cast.ToFloat64(envVal)
-		case reflect.Bool:
-			val = cast.ToBool(envVal)
-		case reflect.String:
-			val = cast.ToString(envVal)
-		default:
-			val = cast.ToString(envVal)
-		}
-		c.set(dotKey, val)
-
-	}
 }

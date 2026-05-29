@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -25,6 +26,8 @@ func ReadFile(file string) (ConfigMap, error) {
 		err = jsonDecode(content, &dataMap)
 	case ext == "yaml" || ext == "yml":
 		err = yamlDecode(content, &dataMap)
+	case ext == "ini":
+		err = iniDecode(content, &dataMap)
 	default:
 		err = fmt.Errorf("invalid extension type: %s", ext)
 	}
@@ -40,6 +43,26 @@ func jsonDecode(j []byte, d *ConfigMap) error {
 
 func yamlDecode(j []byte, d *ConfigMap) error {
 	return yaml.Unmarshal(j, d)
+}
+
+func iniDecode(j []byte, d *ConfigMap) error {
+	cfg, err := ini.Load(j)
+	if err != nil {
+		return err
+	}
+	*d = make(ConfigMap)
+	for _, section := range cfg.Sections() {
+		name := section.Name()
+		if name == "DEFAULT" {
+			continue
+		}
+		sectionMap := make(ConfigMap)
+		for _, key := range section.Keys() {
+			sectionMap[key.Name()] = key.String()
+		}
+		(*d)[name] = sectionMap
+	}
+	return nil
 }
 
 func getFileExt(s string) (ext string) {
