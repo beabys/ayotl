@@ -12,52 +12,26 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type MockConfig struct {
-	App     MockApplicationConfig `mapstructure:"application"`
-	Logger  MockLoggerConfig      `mapstructure:"logger"`
-	Logger2 MockLoggerConfig      `mapstructure:"logger2"`
-}
-type MockApplicationConfig struct {
-	Port int `mapstructure:"port"`
-}
-type MockLoggerConfig struct {
-	LogOutput   string `mapstructure:"log_output_to"`
-	ErrorOutput string `mapstructure:"log_errors_to"`
-	Level       string `mapstructure:"log_level"`
-}
-
-// EnvOnlyConfig is used for testing env-only loading.
-type EnvOnlyConfig struct {
-	Server  EnvServerConfig  `mapstructure:"server"`
-	Logger  *EnvLoggerConfig `mapstructure:"logger"`
-	Timeout int              `mapstructure:"timeout"`
-}
-
-// EnvServerConfig holds server-related env-only config.
-type EnvServerConfig struct {
-	Host  string `mapstructure:"host"`
-	Port  int    `mapstructure:"port"`
-	Debug bool   `mapstructure:"debug"`
-}
-
-// EnvLoggerConfig holds logger-related env-only config.
-type EnvLoggerConfig struct {
-	Level string `mapstructure:"level"`
+// Structs for unmarshal testing — no interfaces needed, just mapstructure tags.
+type AppConfig struct {
+	Server struct {
+		Enabled bool `mapstructure:"enabled"`
+	} `mapstructure:"server"`
+	Second struct {
+		Config struct {
+			Enabled bool `mapstructure:"enabled"`
+		} `mapstructure:"config"`
+	} `mapstructure:"second"`
 }
 
 func TestConfig(t *testing.T) {
-
 	path := "./testConfig/"
 	defer os.RemoveAll(path)
+
 	t.Run("test new should return a new config", func(t *testing.T) {
-		mock := &MockConfig{}
-		configMap := make(ConfigMap)
-		envConfigMap := make(ConfigMap)
-		config := New().SetConfigImpl(mock).SetConfigMap(configMap).WithEnv()
-		want := &Config{ConfigMap: configMap, EnvConfigMap: envConfigMap, configImpl: mock}
-		want.WithEnv()
-		areEqual := assert.ObjectsAreEqual(config, want)
-		assert.True(t, areEqual)
+		config := New()
+		assert.NotNil(t, config.ConfigMap)
+		assert.NotNil(t, config.EnvConfigMap)
 	})
 
 	t.Run("test Error Loading configs path without CONFIG_FILE", func(t *testing.T) {
@@ -68,14 +42,13 @@ func TestConfig(t *testing.T) {
 
 	t.Run("test Error Loading configs file", func(t *testing.T) {
 		os.Unsetenv("CONFIG_FILE")
-		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock)
+		config := New()
 		assert.ErrorContains(t, config.LoadConfigs("./../env.configuration.json"), "fail to load configs")
 	})
 
 	t.Run("Test Loading configs", func(t *testing.T) {
-		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).WithEnv()
+		mock := &AppConfig{}
+		config := New().WithEnv()
 		data := `{"server": {"enabled": false},"second": {"config": {"enabled": false}}}`
 		testPath, err := createTestConfigFile(path, "/config.json", data)
 		assert.NoError(t, err)
@@ -84,25 +57,44 @@ func TestConfig(t *testing.T) {
 	})
 
 	t.Run("Test Loading configs with config placeholders", func(t *testing.T) {
-		mock := &MockConfig{}
+		mock := &AppConfig{}
 		data := `{"server": {"enabled": "${IS_CONFIG_FOR_TEST_ENABLED}"},"second": {"config": {"enabled": false}}}`
 		testPath, err := createTestConfigFile(path, "/config.json", data)
 		assert.NoError(t, err)
 		os.Setenv("IS_CONFIG_FOR_TEST_ENABLED", "true")
-		// c := New()
-		config := New().SetConfigImpl(mock).WithEnv()
+		config := New().WithEnv()
 		assert.NoError(t, config.LoadConfigs(testPath+"/config.json"))
 		assert.NoError(t, config.Unmarshal(mock))
 		os.Unsetenv("IS_CONFIG_FOR_TEST_ENABLED")
 	})
 
+	t.Run("Test Loading ini configs", func(t *testing.T) {
+		type ServerConfig struct {
+			Host string `mapstructure:"host"`
+			Port string `mapstructure:"port"`
+		}
+		type AppConfig struct {
+			Server ServerConfig `mapstructure:"server"`
+		}
+
+		data := "[server]\nhost = localhost\nport = 8080\n"
+		testPath, err := createTestConfigFile(path, "/config.ini", data)
+		assert.NoError(t, err)
+
+		mock := &AppConfig{}
+		config := New()
+		assert.NoError(t, config.LoadConfigs(testPath+"/config.ini"))
+		assert.NoError(t, config.Unmarshal(mock))
+		assert.Equal(t, "localhost", mock.Server.Host)
+		assert.Equal(t, "8080", mock.Server.Port)
+	})
+
 	t.Run("Test Loading configs with config placeholders and no Value", func(t *testing.T) {
-		mock := &MockConfig{}
+		mock := &AppConfig{}
 		data := `{"server": {"enabled": "${IS_CONFIG_FOR_TEST_ENABLED_SECOND}"},"second": {"config": {"enabled": false}}}`
 		testPath, err := createTestConfigFile(path, "/config.json", data)
 		assert.NoError(t, err)
-		// c := &Config{}
-		config := New().SetConfigImpl(mock).WithEnv()
+		config := New().WithEnv()
 		assert.NoError(t, config.LoadConfigs(testPath+"/config.json"))
 		assert.NoError(t, config.Unmarshal(mock))
 	})
@@ -110,9 +102,8 @@ func TestConfig(t *testing.T) {
 
 func TestMustFunctions(t *testing.T) {
 	t.Run("test MustBool", func(t *testing.T) {
-		mock := &MockConfig{}
 		os.Setenv("ANY", "false")
-		config := New().SetConfigImpl(mock).WithEnv()
+		config := New().WithEnv()
 		required := true
 		val := config.MustBool("ANY", required)
 		assert.False(t, val)
@@ -120,8 +111,7 @@ func TestMustFunctions(t *testing.T) {
 	})
 	t.Run("test MustBool exist", func(t *testing.T) {
 		os.Setenv("ANY", "true")
-		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).WithEnv()
+		config := New().WithEnv()
 		required := true
 		val := config.MustBool("ANY", required)
 		assert.True(t, val)
@@ -129,8 +119,7 @@ func TestMustFunctions(t *testing.T) {
 	})
 	t.Run("test MustString", func(t *testing.T) {
 		os.Setenv("ANY", "required")
-		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).WithEnv()
+		config := New().WithEnv()
 		required := "required"
 		val := config.MustString("ANY", required)
 		assert.Equal(t, val, required)
@@ -139,8 +128,7 @@ func TestMustFunctions(t *testing.T) {
 
 	t.Run("test MustInt", func(t *testing.T) {
 		os.Setenv("ANY", "0")
-		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).WithEnv()
+		config := New().WithEnv()
 		required := 0
 		val := config.MustInt("ANY", required)
 		assert.Equal(t, val, required)
@@ -149,8 +137,7 @@ func TestMustFunctions(t *testing.T) {
 
 	t.Run("test MustInt32", func(t *testing.T) {
 		os.Setenv("ANY", "0")
-		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).WithEnv()
+		config := New().WithEnv()
 		integer := 0
 		required := int32(integer)
 		val := config.MustInt32("ANY", required)
@@ -160,8 +147,7 @@ func TestMustFunctions(t *testing.T) {
 
 	t.Run("test MustInt64", func(t *testing.T) {
 		os.Setenv("ANY", "0")
-		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).WithEnv()
+		config := New().WithEnv()
 		integer := 0
 		required := int64(integer)
 		val := config.MustInt64("ANY", required)
@@ -171,8 +157,7 @@ func TestMustFunctions(t *testing.T) {
 
 	t.Run("test MustString with variable", func(t *testing.T) {
 		os.Setenv("ANY", "required")
-		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).WithEnv()
+		config := New().WithEnv()
 		required := "required"
 		val := config.MustString("ANY", required)
 		assert.Equal(t, val, required)
@@ -181,8 +166,7 @@ func TestMustFunctions(t *testing.T) {
 
 	t.Run("test MustInt with variable", func(t *testing.T) {
 		os.Setenv("ANY", "10")
-		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).WithEnv()
+		config := New().WithEnv()
 		required := 10
 		val := config.MustInt("ANY", required)
 		assert.Equal(t, val, required)
@@ -191,8 +175,7 @@ func TestMustFunctions(t *testing.T) {
 
 	t.Run("test MustInt32 with variable", func(t *testing.T) {
 		os.Setenv("ANY", "10")
-		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).WithEnv()
+		config := New().WithEnv()
 		integer := 10
 		required := int32(integer)
 		val := config.MustInt32("ANY", required)
@@ -202,8 +185,7 @@ func TestMustFunctions(t *testing.T) {
 
 	t.Run("test MustInt64 with variable", func(t *testing.T) {
 		os.Setenv("ANY", "10")
-		mock := &MockConfig{}
-		config := New().SetConfigImpl(mock).WithEnv()
+		config := New().WithEnv()
 		integer := 10
 		required := int64(integer)
 		val := config.MustInt64("ANY", required)
@@ -213,15 +195,39 @@ func TestMustFunctions(t *testing.T) {
 }
 
 func TestLoadEnvOnly(t *testing.T) {
-	// Set env vars matching the struct's mapstructure tags
 	t.Setenv("SERVER_HOST", "localhost")
 	t.Setenv("SERVER_PORT", "8080")
 	t.Setenv("SERVER_DEBUG", "true")
 	t.Setenv("LOGGER_LEVEL", "debug")
 	t.Setenv("TIMEOUT", "30")
 
-	mock := &EnvOnlyConfig{}
-	config := New().SetConfigImpl(mock)
+	type ServerConfig struct {
+		Host  string `mapstructure:"host"`
+		Port  int    `mapstructure:"port"`
+		Debug bool   `mapstructure:"debug"`
+	}
+	type LoggerConfig struct {
+		Level string `mapstructure:"level"`
+	}
+	type AppConfig struct {
+		Server  ServerConfig  `mapstructure:"server"`
+		Logger  *LoggerConfig `mapstructure:"logger"`
+		Timeout int           `mapstructure:"timeout"`
+	}
+
+	config := New()
+	config.Defaults = ConfigMap{
+		"server.port":   9090,
+		"logger.level":  "info",
+		"timeout":       60,
+	}
+	config.EnvAlias = ConfigEnvAlias{
+		"SERVER_HOST":   "server.host",
+		"SERVER_PORT":   "server.port",
+		"SERVER_DEBUG":  "server.debug",
+		"LOGGER_LEVEL":  "logger.level",
+		"TIMEOUT":       "timeout",
+	}
 	err := config.LoadConfigs()
 	assert.NoError(t, err)
 
@@ -233,6 +239,7 @@ func TestLoadEnvOnly(t *testing.T) {
 	assert.Equal(t, 30, config.MustInt("timeout", 0))
 
 	// Verify values via Unmarshal
+	mock := &AppConfig{}
 	err = config.Unmarshal(mock)
 	assert.NoError(t, err)
 	assert.Equal(t, "localhost", mock.Server.Host)
@@ -247,8 +254,19 @@ func TestLoadEnvOnlyWithDefaults(t *testing.T) {
 	// Set only one env var
 	t.Setenv("SERVER_HOST", "example.com")
 
-	mock := &EnvOnlyConfig{}
-	config := New().SetConfigImpl(mock)
+	config := New()
+	config.Defaults = ConfigMap{
+		"server.port":   9090,
+		"logger.level":  "info",
+		"timeout":       60,
+	}
+	config.EnvAlias = ConfigEnvAlias{
+		"SERVER_HOST":   "server.host",
+		"SERVER_PORT":   "server.port",
+		"SERVER_DEBUG":  "server.debug",
+		"LOGGER_LEVEL":  "logger.level",
+		"TIMEOUT":       "timeout",
+	}
 	err := config.LoadConfigs()
 	assert.NoError(t, err)
 
@@ -261,6 +279,16 @@ func TestLoadEnvOnlyWithDefaults(t *testing.T) {
 	assert.Equal(t, 60, config.MustInt("timeout", 0))
 }
 
+func TestLoadEnvOnlyWithoutAlias(t *testing.T) {
+	// No Defaults, no EnvAlias — just env vars in EnvConfigMap
+	t.Setenv("SOME_VAR", "value")
+	config := New()
+	err := config.LoadConfigs()
+	assert.NoError(t, err)
+	// No panic, ConfigMap empty (no alias to map anything)
+	assert.Nil(t, config.Get("SOME_VAR"))
+}
+
 func TestLoadEnvOnlyWithoutImpl(t *testing.T) {
 	config := New()
 	// Should not panic when no configImpl is set
@@ -268,11 +296,38 @@ func TestLoadEnvOnlyWithoutImpl(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestNewWithParams(t *testing.T) {
+	params := &Params{
+		Defaults: ConfigMap{
+			"server.port": 9090,
+		},
+		EnvAlias: ConfigEnvAlias{
+			"SERVER_HOST": "server.host",
+		},
+	}
+	cfg := NewWithParams(params)
+	assert.Equal(t, params.Defaults, cfg.Defaults)
+	assert.Equal(t, params.EnvAlias, cfg.EnvAlias)
+	// Maps are initialized
+	assert.NotNil(t, cfg.ConfigMap)
+	assert.NotNil(t, cfg.EnvConfigMap)
+
+	// Load + verify
+	t.Setenv("SERVER_HOST", "example.com")
+	cfg.WithEnv().LoadConfigs()
+	assert.Equal(t, "example.com", cfg.MustString("server.host", ""))
+	assert.Equal(t, 9090, cfg.MustInt("server.port", 0))
+}
+
 func TestImmutableBlocksSet(t *testing.T) {
-	mock := &EnvOnlyConfig{}
-	config := New().SetConfigImpl(mock)
-	err := config.LoadConfigs()
-	assert.NoError(t, err)
+	config := New()
+	config.Defaults = ConfigMap{
+		"server.host": "original",
+	}
+	config.EnvAlias = ConfigEnvAlias{
+		"SERVER_HOST": "server.host",
+	}
+	_ = config.LoadConfigs()
 
 	// Sanity check: Set works before Immutable
 	config.Set("server.host", "should-work")
@@ -290,8 +345,12 @@ func TestImmutableAllowsLoadConfigs(t *testing.T) {
 	t.Setenv("SERVER_HOST", "immutable-load-test")
 	t.Setenv("SERVER_PORT", "3000")
 
-	mock := &EnvOnlyConfig{}
-	config := New().SetConfigImpl(mock).Immutable()
+	config := New()
+	config.EnvAlias = ConfigEnvAlias{
+		"SERVER_HOST": "server.host",
+		"SERVER_PORT": "server.port",
+	}
+	config.Immutable()
 
 	// LoadConfigs must still work even after Immutable
 	err := config.LoadConfigs()
@@ -307,8 +366,7 @@ func TestImmutableAllowsLoadConfigs(t *testing.T) {
 }
 
 func TestImmutableBlocksSetConfigMap(t *testing.T) {
-	mock := &EnvOnlyConfig{}
-	config := New().SetConfigImpl(mock)
+	config := New()
 	_ = config.LoadConfigs()
 	config.Immutable()
 
@@ -316,16 +374,25 @@ func TestImmutableBlocksSetConfigMap(t *testing.T) {
 	assert.NotEqual(t, "nope", config.MustString("server.host", ""))
 }
 
-func TestImmutableBlocksWithEnv(t *testing.T) {
+func TestImmutableBlocksPublicWithEnv(t *testing.T) {
+	t.Setenv("SERVER_HOST", "immutable-test")
 	t.Setenv("SHOULD_NOT_LOAD", "secret")
-	mock := &EnvOnlyConfig{}
-	config := New().SetConfigImpl(mock)
+
+	config := New()
+	config.EnvAlias = ConfigEnvAlias{
+		"SERVER_HOST": "server.host",
+	}
 	_ = config.LoadConfigs()
 	config.Immutable()
 
-	// WithEnv should be a no-op when immutable
+	// WithEnv is a no-op after Immutable
 	config.WithEnv()
-	assert.Equal(t, "", config.MustString("SHOULD_NOT_LOAD", ""))
+
+	// Env vars NOT in the alias should NOT be in ConfigMap
+	assert.Nil(t, config.Get("SHOULD_NOT_LOAD"))
+
+	// Env vars that ARE in the alias should still be accessible
+	assert.NotEmpty(t, config.MustString("server.host", ""))
 }
 
 func TestImmutableBlocksConfigFileMerge(t *testing.T) {
@@ -333,8 +400,7 @@ func TestImmutableBlocksConfigFileMerge(t *testing.T) {
 	path := filepath.Join(dir, "test.json")
 	assert.NoError(t, os.WriteFile(path, []byte(`{"server":{"host":"from-file"}}`), 0644))
 
-	mock := &EnvOnlyConfig{}
-	config := New().SetConfigImpl(mock)
+	config := New()
 	_ = config.LoadConfigs()
 	config.Immutable()
 
@@ -342,22 +408,6 @@ func TestImmutableBlocksConfigFileMerge(t *testing.T) {
 	err := config.ConfigFileMerge(path)
 	assert.NoError(t, err)
 	assert.NotEqual(t, "from-file", config.MustString("server.host", ""))
-}
-
-func (ec *EnvOnlyConfig) SetDefaults() ConfigMap {
-	return ConfigMap{
-		"server.port":   9090,
-		"logger.level":  "info",
-		"timeout":       60,
-	}
-}
-
-func (mc *MockConfig) SetDefaults() ConfigMap {
-	defaults := make(ConfigMap)
-	defaults["this.is.a.very.nested.config"] = true
-	defaults["this.is.a.very.nested.config.with"] = "one"
-	defaults["this.is.a.very.nested.config.with.second"] = int(2)
-	return defaults
 }
 
 func createTestConfigFile(path, filename, data string) (string, error) {

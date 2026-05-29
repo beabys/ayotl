@@ -64,6 +64,52 @@ func TestReadFileYAMLAndYML(t *testing.T) {
 	}
 }
 
+func TestReadFileINI(t *testing.T) {
+	dir := t.TempDir()
+	iniContent := `[server]
+host = localhost
+port = 8080
+
+[logger]
+level = debug
+`
+	path := writeTempFile(t, dir, "test.ini", iniContent)
+
+	m, err := ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile returned unexpected error: %v", err)
+	}
+
+	server, ok := m["server"].(ConfigMap)
+	if !ok {
+		t.Fatalf("expected server to be ConfigMap, got %#v", m["server"])
+	}
+	if v, _ := server["host"].(string); v != "localhost" {
+		t.Fatalf("expected server.host = localhost, got %#v", server["host"])
+	}
+	if v, _ := server["port"].(string); v != "8080" {
+		t.Fatalf("expected server.port = 8080, got %#v", server["port"])
+	}
+
+	logger, ok := m["logger"].(ConfigMap)
+	if !ok {
+		t.Fatalf("expected logger to be ConfigMap, got %#v", m["logger"])
+	}
+	if v, _ := logger["level"].(string); v != "debug" {
+		t.Fatalf("expected logger.level = debug, got %#v", logger["level"])
+	}
+}
+
+func TestReadFileINIMalformed(t *testing.T) {
+	dir := t.TempDir()
+	path := writeTempFile(t, dir, "bad.ini", "[server\nhost = localhost")
+
+	_, err := ReadFile(path)
+	if err == nil {
+		t.Fatalf("expected ini decode error, got nil")
+	}
+}
+
 func TestReadFileInvalidExtension(t *testing.T) {
 	dir := t.TempDir()
 	path := writeTempFile(t, dir, "test.txt", "a: b")
