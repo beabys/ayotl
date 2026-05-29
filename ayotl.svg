@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Ayotl - turtle shell icon">
+  <!-- Domed carapace outline -->
+  <path d="M4 18C4 5 20 5 20 18"/>
+  <!-- Bottom edge of shell -->
+  <path d="M4 18 L20 18"/>
+  <!-- Central vertebral scute ridge -->
+  <path d="M12 6 L12 17"/>
+  <!-- Upper costal scute segments forming hex pattern -->
+  <path d="M12 9 L7 12"/>
+  <path d="M12 9 L17 12"/>
+  <!-- Lower costal scute segments -->
+  <path d="M12 14 L7 17"/>
+  <path d="M12 14 L17 17"/>
+</svg>

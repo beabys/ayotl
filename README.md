@@ -1,9 +1,14 @@
 # Ayotl
 
+<img src="./ayotl.svg" alt="Ayotl Logo" width="128" align="center" />
+
 Ayotl is a lightweight Go library for loading configuration.
 It supports **config files** (JSON / YAML / INI), **environment variable placeholders** within those files,
 and **environment-only mode** for when no config file is needed — without forcing you
 to implement any interface.
+
+The name derives from Nahuatl, an ancient Mexican language, meaning "turtle shell" — symbolizing a protective layer for your application configuration.
+
 
 ```go
 import "github.com/beabys/ayotl"
