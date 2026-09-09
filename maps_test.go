@@ -155,3 +155,32 @@ func TestMergeKeys_ReplaceWithMap(t *testing.T) {
 		t.Fatalf("MergeKeys(replace with map) = %#v, want %#v", got, want)
 	}
 }
+
+func TestMergeKeys_MapStringInterfaceInput(t *testing.T) {
+	m1 := map[string]interface{}{
+		"a": "1",
+		"s": map[string]interface{}{
+			"k1": "v1",
+		},
+	}
+	m2 := map[string]interface{}{
+		"b": "2",
+		"s": map[string]interface{}{
+			"k2": "v2",
+		},
+	}
+
+	got := MergeKeys(m1, m2)
+	want := map[string]interface{}{
+		"a": "1",
+		"b": "2",
+		"s": map[string]interface{}{
+			"k1": "v1",
+			"k2": "v2",
+		},
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("MergeKeys(map[string]interface{}) = %#v, want %#v", got, want)
+	}
+}
