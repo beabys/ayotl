@@ -7,24 +7,40 @@ import (
 )
 
 // MergeKeys merge 2 ConfigMap given
-func MergeKeys(m1, m2 ConfigMap) map[string]interface{} {
-	for key, m2Val := range m2 {
+func MergeKeys(m1, m2 interface{}) map[string]interface{} {
+	a := toConfigMap(m1)
+	b := toConfigMap(m2)
+	if a == nil {
+		return b
+	}
+	for key, m2Val := range b {
 		// first we validate if key exist
-		m1Val, ok := m1[key]
+		m1Val, ok := a[key]
 		if !ok {
 			// If key no exist , add it and continue
-			m1[key] = m2Val
+			a[key] = m2Val
 			continue
 		}
-		switch v := m1Val.(type) {
-		case map[string]interface{}:
+		switch m1Val.(type) {
+		case map[string]interface{}, ConfigMap:
 			// Recursive Call
-			m1[key] = MergeKeys(v, m2Val.(ConfigMap))
+			a[key] = MergeKeys(m1Val, toConfigMap(m2Val))
 		default:
-			m1[key] = m2Val
+			a[key] = m2Val
 		}
 	}
-	return m1
+	return a
+}
+
+// toConfigMap normalize v into a ConfigMap
+func toConfigMap(v interface{}) ConfigMap {
+	if cm, ok := v.(ConfigMap); ok {
+		return cm
+	}
+	if m, ok := v.(map[string]interface{}); ok {
+		return ConfigMap(m)
+	}
+	return nil
 }
 
 // MergeEnvVar merge Env variables into placeholders
